@@ -84,7 +84,7 @@ Alternativa: **New → Web Service** → conectar GitHub → elegir **Free** y c
 
 ```bash
 pip install pytest pypdf
-pytest -q
+python -m pytest -q
 node --check app.js
 ```
 
