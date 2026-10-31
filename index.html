@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokémon TCG | Cartas en español para imprimir</title>
+    <meta name="description" content="Explora cartas Pokémon TCG en español, guarda favoritos y descarga hojas PDF para recortar." />
+    <meta name="theme-color" content="#e53935" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>Cartas Pokémon TCG</h1>
+    </header>
+    
+    <main>
+        <div class="container">
+            <div class="sidebar">
+                <h2>Expansiones</h2>
+                <div class="buscador-expansiones">
+                    <input type="text" id="buscador-expansiones" placeholder="Buscar expansión..." class="buscador-input">
+                </div>
+                <div class="loading-spinner" id="loading-expansiones">Cargando...</div>
+                <ul id="lista-expansiones" class="expansion-list"></ul>
+            </div>
+            
+            <div class="content">
+                <h2 id="titulo-expansion">Selecciona una expansión</h2>
+                
+                <!-- Filtro por tipo -->
+                <div class="filtro-container">
+                    <label for="filtro-tipo">Filtrar por tipo:</label>
+                    <select id="filtro-tipo" class="filtro-select">
+                        <option value="todos">Todos los tipos</option>
+                        <!-- Las opciones se cargarán dinámicamente -->
+                    </select>
+                </div>
+                
+                <div class="loading-spinner" id="loading-cartas">Cargando...</div>
+                <div id="cartas-container" class="cards-grid"></div>
+                <div id="paginacion" class="pagination">
+                    <button id="anterior" disabled>Anterior</button>
+                    <span id="pagina-actual">Página 1</span>
+                    <button id="siguiente" disabled>Siguiente</button>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <footer>
+        <p>Catálogo comunitario con datos de TCGdex. Pokémon y sus imágenes pertenecen a sus respectivos titulares. Proyecto no oficial, sin afiliación con Nintendo, The Pokémon Company o TCGdex.</p>
+    </footer>
+
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="detalle-carta"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html> 
