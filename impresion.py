@@ -50,14 +50,17 @@ def generar_pdf(images: list[Image.Image]) -> bytes:
             pdf.drawImage(ImageReader(cropped), x, y, width=CARD_WIDTH, height=CARD_HEIGHT,
                           preserveAspectRatio=False)
             cropped.close()
-        pdf.setStrokeColor(colors.Color(0.35, 0.35, 0.35))
-        pdf.setLineWidth(0.35)
+        # Guías de corte como en la versión original: cruzan toda la página.
+        # El tramo fuera del A4 se recorta naturalmente al visualizar o imprimir.
+        pdf.setStrokeColor(colors.black)
+        pdf.setLineWidth(0.8)
+        extension = 1 * cm
         for col in range(COLUMNS + 1):
             x = x_origin + col * CARD_WIDTH
-            pdf.line(x, y_origin - 4, x, y_origin + ROWS * CARD_HEIGHT + 4)
+            pdf.line(x, -extension, x, height + extension)
         for row in range(ROWS + 1):
             y = y_origin + row * CARD_HEIGHT
-            pdf.line(x_origin - 4, y, x_origin + COLUMNS * CARD_WIDTH + 4, y)
+            pdf.line(-extension, y, width + extension, y)
         pdf.showPage()
     pdf.save()
     return output.getvalue()
