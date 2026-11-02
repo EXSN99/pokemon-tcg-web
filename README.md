@@ -1,104 +1,90 @@
-# Pokémon TCG — catálogo web en español + PDF de impresión
+# Pokémon TCG — Cartas en español para imprimir
 
-Adaptación del proyecto original HTML/CSS/JavaScript/Flask/ReportLab para acceso desde celulares y computadoras, sin servidor Python local en cada dispositivo.
+**Explora cartas Pokémon TCG en español, crea tu selección de favoritas y descárgalas en PDF, listas para imprimir y recortar.** Una aplicación web gratuita de uso personal, accesible desde computadoras, tablets y celulares.
 
-## Características conservadas
+### 🌐 [Abrir la aplicación web](https://pokemon-tcg-cartas-0nch.onrender.com/)
 
-- Cartas de TCGdex en español; expansiones, tipos, categorías, nombre, habilidad y búsqueda general.
-- Favoritos por navegador; historial local de PDFs descargados.
-- Visor de imágenes, navegación y diseño responsive.
-- Exportar **PDF A4 con 9 cartas de 63 × 88 mm por página**, centradas y con guías de corte.
+**No requiere instalación ni registro.** Solo necesitas un navegador y conexión a Internet.
 
-## Cambios de esta versión
+---
 
-- Un solo origen HTTPS: Flask sirve HTML, CSS, JavaScript y `POST /api/pdf`.
-- El navegador **ya no** llama a `127.0.0.1` ni sube imágenes a carpetas del servidor.
-- Flask obtiene las imágenes directamente desde URLs oficiales validadas de TCGdex y crea el PDF en memoria.
-- Se incluyen un límite de 54 cartas por PDF, límites de tamaño, tiempos de espera y validación de IDs.
-- Imágenes `low.webp` para el catálogo y `high.webp` para el detalle y PDF.
-- Botón **Compartir favoritos**: envía un enlace con los identificadores y los importa al abrirlo desde otro dispositivo.
-- Botón para abrir manualmente el PDF generado cuando un navegador móvil bloquea la descarga automática.
-- `render.yaml` para Render, pruebas y GitHub Actions.
+## ¿Qué puedes hacer?
 
-## 1. Ejecutar localmente (Windows, PowerShell)
+| Función | Descripción |
+| --- | --- |
+| 🃏 **Explorar cartas** | Visualiza cartas Pokémon TCG en español organizadas por expansiones, con imágenes y vista ampliada. |
+| 🔍 **Buscar y filtrar** | Filtra por expansión, nombre, categoría, tipo y Pokémon con habilidad. También puedes buscar texto en los campos disponibles de las cartas. |
+| ❤️ **Guardar favoritas** | Selecciona las cartas que quieres imprimir. Puedes añadirlas o retirarlas de tu lista. |
+| 📄 **Descargar PDF** | Genera un documento A4 con hasta **9 cartas por hoja**, preparado para imprimir y recortar. |
+| ✂️ **Usar guías de corte** | El PDF incluye líneas extendidas hasta los bordes de la página para facilitar el recorte. |
+| 🔗 **Compartir favoritas** | Envía un enlace a otra persona o dispositivo para importar tu selección de cartas. |
+| 🕘 **Consultar historial** | Revisa cuándo generaste PDFs con cada carta desde el navegador actual. |
 
-```powershell
-cd pokemon-tcg-web
-py -3 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python server.py
-```
+## Cómo usar la aplicación
 
-Abrir <http://127.0.0.1:5000>. `index.html` debe servirse mediante Flask; no abras el HTML como un archivo `file://` para generar PDFs.
+1. **Entra a la web:** [pokemon-tcg-cartas-0nch.onrender.com](https://pokemon-tcg-cartas-0nch.onrender.com/).
+2. **Explora las expansiones:** selecciona una de la lista o utiliza el buscador de expansiones.
+3. **Encuentra tus cartas:** usa los filtros de nombre, categoría, tipo, habilidad o **Búsqueda General**. En este último campo, pulsa **Buscar** o **Enter** para aplicar la búsqueda.
+4. **Abre una carta:** selecciónala para ver su imagen ampliada y navegar entre cartas.
+5. **Añádela a favoritos:** pulsa el corazón 🤍. La selección aparecerá en el botón ❤️ del encabezado.
+6. **Abre tus favoritas:** pulsa ❤️ y revisa las cartas seleccionadas. Allí puedes quitarlas, compartirlas o exportarlas.
+7. **Descarga el PDF:** pulsa **📥 Exportar a PDF**. Si el navegador no descarga el archivo automáticamente, utiliza el enlace **«Abrir o descargar el último PDF»**.
+8. **Imprime y recorta:** imprime el PDF en papel A4 con **escala 100 % / Tamaño real**. No actives «Ajustar a página».
 
-En macOS/Linux:
+### Tamaños de impresión
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python server.py
-```
+| Elemento | Medida |
+| --- | --- |
+| Papel | **A4 — 210 × 297 mm** |
+| Cada carta | **63 × 88 mm** |
+| Distribución | **3 columnas × 3 filas** |
+| Cartas por página | **9** |
+| Cartas por PDF | **Máximo 54** |
+| Cuadrícula de 9 cartas | **189 × 264 mm** |
+| Márgenes | **10,5 mm laterales / 16,5 mm verticales** |
 
-## 2. Publicar en GitHub
+Las líneas de corte se prolongan hasta los bordes del documento. El tamaño de cada carta se define en el PDF, pero una impresora puede reducirlo si se selecciona alguna opción de ajuste de escala.
 
-Crear un repositorio nuevo en GitHub y subir **todo el contenido de esta carpeta a la raíz** del repositorio (incluidos `render.yaml`, `server.py` y `requirements.txt`). Por línea de comandos:
+## Compartir tus cartas favoritas
 
-```bash
-git init
-git add .
-git commit -m "Publicar catálogo Pokémon TCG"
-git branch -M main
-git remote add origin https://github.com/TU_USUARIO/TU_REPOSITORIO.git
-git push -u origin main
-```
+1. Abre ❤️ **Favoritos** y pulsa **🔗 Compartir favoritos**.
+2. Comparte el enlace generado o cópialo desde el navegador.
+3. Al abrir el enlace, la otra persona podrá importar las cartas a sus favoritos en su propio navegador.
 
-Puedes usar repositorio privado en Render si autorizas el acceso a GitHub.
+**Importante:** compartir la selección **no** crea una cuenta ni sincroniza automáticamente los cambios posteriores entre dispositivos.
 
-## 3. Desplegar gratis con Render
+## Historial y almacenamiento
 
-1. Ingresar a <https://dashboard.render.com/>.
-2. **New → Blueprint**, enlazar el repositorio que contiene `render.yaml` y aplicar el Blueprint. Se crea un servicio web `Free`.
-3. Esperar a que el estado del servicio sea **Live** y abrir la URL HTTPS asignada, por ejemplo `https://pokemon-tcg-cartas-XXXX.onrender.com`. La URL exacta la entrega Render; no está reservada por esta carpeta.
-4. Para usar desde el celular, abrir esa URL directamente. Al hacer `git push`, Render despliega de nuevo si está vinculado correctamente.
+- Los **favoritos** y el **historial de descargas** se guardan en el navegador mediante almacenamiento local.
+- Puedes eliminar favoritos o entradas del historial desde la aplicación.
+- Si borras los datos del navegador o cambias de dispositivo, esa información puede perderse. Puedes usar **Compartir favoritos** para transferir una selección.
+- **Histórico** registra las generaciones de PDF por carta, pero **no conserva copias descargables de los PDF anteriores**.
+- Las imágenes y las cartas dependen de la disponibilidad de los datos en español de [TCGdex](https://tcgdex.dev/). Algunas cartas pueden no disponer de imagen.
 
-Alternativa: **New → Web Service** → conectar GitHub → elegir **Free** y configurar:
+## Preguntas frecuentes
 
-- Runtime: `Python`.
-- Build Command: `pip install -r requirements.txt`.
-- Start Command: `gunicorn server:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 180`.
-- Health Check Path: `/health`.
+**¿Puedo utilizarla desde el celular?**  
+Sí. La web se adapta a pantallas móviles y funciona con un navegador moderno.
 
-**Limitaciones del plan gratuito:** suspensión tras unos 15 minutos sin tráfico, arranque en frío, límites de memoria/horas/tráfico; no es un SLA productivo. No se guardan PDFs en el servidor.
+**¿Necesito instalar Python o alguna aplicación?**  
+No. Abre el enlace de la aplicación desde tu navegador.
 
-## 4. Uso
+**¿Puedo imprimir varias cartas a la vez?**  
+Sí. Guarda hasta 54 cartas en favoritos y exporta un PDF. Se distribuirán en páginas de nueve cartas.
 
-1. Escoge una expansión y filtra cartas. Agrégalas con el corazón.
-2. En **Favoritos** selecciona **Exportar a PDF**; máximo 54 cartas por PDF.
-3. Imprime el PDF sobre papel A4 en **escala 100 % / Tamaño real**, sin activar «Ajustar a página». Cada carta debe medir **63 × 88 mm**.
-4. Para pasar una selección a otro dispositivo, pulsa **Compartir favoritos**, envía el enlace y ábrelo en el otro navegador. Las cartas se importarán a sus favoritos locales.
-5. El histórico muestra las generaciones de PDF registradas en el navegador; no son archivos persistidos en el servidor.
+**¿Por qué mis cartas impresas se ven más pequeñas?**  
+Verifica que el visor o la impresora esté configurado en **100 % / Tamaño real**, sin escalado ni ajuste automático.
 
-## 5. Pruebas y endpoints
+**¿Puedo utilizar la búsqueda para encontrar texto de ataques o habilidades?**  
+La **Búsqueda General** revisa campos de detalle, incluidos ataques y habilidades, de las cartas consultadas. **No es una búsqueda exhaustiva de todo el catálogo**; conviene acotarla por expansión, tipo o nombre cuando sea posible.
 
-```bash
-pip install pytest pypdf
-python -m pytest -q
-node --check app.js
-```
+**¿Mis favoritos se comparten automáticamente con otros dispositivos?**  
+No. Cada navegador guarda sus favoritos localmente. Puedes transferirlos mediante **Compartir favoritos**.
 
-- `GET /` : visor web.
-- `GET /health` : salud del servicio.
-- `POST /api/pdf` : JSON `{ "ids": ["swsh3-136", "swsh3-136"] }`. Permite IDs repetidos para obtener copias.
+## Sobre el proyecto
 
-## 6. Límites y siguientes mejoras
+Proyecto personal y comunitario para explorar cartas en español y preparar hojas imprimibles de Pokémon TCG. Utiliza el catálogo y las imágenes disponibles a través de **[TCGdex](https://tcgdex.dev/)**.
 
-- Los **favoritos e historial se almacenan mediante `localStorage`**: se mantienen en ese mismo navegador si no borras sus datos, pero no se sincronizan automáticamente. Compartir enlaces funciona sin cuentas.
-- Si necesitas sincronización continua, añadir autenticación y una base de datos persistente (por ejemplo Supabase Auth + PostgreSQL) con listas asociadas a cada cuenta.
-- La **búsqueda general** original consulta el detalle de hasta 100 candidatos. No es una búsqueda integral de todas las cartas: conviene acotar por expansión/tipo/nombre o implementar posteriormente búsqueda indexada.
-- Algunas cartas no tienen imagen en español; una selección con una carta que no se puede descargar hará que la exportación falle con un error, en lugar de generar un PDF incompleto.
-- No se cuenta con caché de imágenes, cuotas de uso por usuario, monitorización externa ni tests de carga. Antes de promocionar el sitio públicamente, añadir estas protecciones.
-- Uso personal/no comercial recomendado. Las imágenes y marcas pertenecen a sus titulares; revisa condiciones de uso antes de redistribuir o comercializar las cartas impresas.
+La interfaz está construida con **HTML, CSS y JavaScript**; el servicio de PDF utiliza **Python, Flask y ReportLab**.
 
-**Fuentes técnicas:** [TCGdex API](https://tcgdex.dev/), [Imágenes TCGdex](https://tcgdex.dev/assets), [Render Web Services](https://render.com/docs/web-services), [Render Free](https://render.com/docs/free).
+> **Aviso:** aplicación no oficial y sin afiliación con Nintendo, The Pokémon Company o TCGdex. Pokémon, las cartas, las ilustraciones y sus marcas pertenecen a sus respectivos titulares. El proyecto está destinado a uso personal y no comercial; antes de distribuir copias impresas, revisa los derechos y condiciones correspondientes.
