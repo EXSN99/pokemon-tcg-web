@@ -21,6 +21,13 @@ def test_health_and_static():
     assert client.get("/health").json == {"status": "ok"}
     assert client.get("/").status_code == 200
     assert client.get("/app.js").status_code == 200
+    indice = client.get("/data/energy-index.json")
+    assert indice.status_code == 200
+    datos = indice.get_json()
+    assert datos["schemaVersion"] == 1
+    assert datos["language"] == "es"
+    assert "swsh3-136" in datos["cards"]
+    assert indice.cache_control.no_cache
 
 def test_validation():
     client = app.test_client()
