@@ -13,9 +13,9 @@
 | Función | Descripción |
 | --- | --- |
 | 🃏 **Explorar cartas** | Visualiza cartas Pokémon TCG en español organizadas por expansiones, con imágenes y vista ampliada. |
-| 🔍 **Buscar y filtrar** | Filtra por expansión, nombre, categoría, tipo y Pokémon con habilidad. También puedes buscar texto en los campos disponibles de las cartas. |
+| 🔍 **Buscar y filtrar** | Filtra por expansión, nombre, categoría, tipo de Pokémon y **energía requerida en sus ataques**. También puedes buscar texto y Pokémon con habilidad. |
 | ❤️ **Guardar favoritas y copias** | Añade la misma carta varias veces. Ajusta sus copias con los botones **− / +** antes de exportar. |
-| 📄 **Descargar PDF** | Genera un documento A4 con hasta **9 cartas por hoja** y **54 copias por PDF**, incluidas las cartas repetidas. |
+| 📄 **Descargar PDF** | Genera un documento A4 con hasta **9 cartas por hoja** y **180 copias por PDF (20 páginas A4)**, incluidas las cartas repetidas. |
 | ✂️ **Usar guías de corte** | El PDF incluye líneas extendidas hasta los bordes de la página para facilitar el recorte. |
 | 🔗 **Compartir favoritas** | Envía un enlace a otra persona o dispositivo para importar tu selección de cartas. |
 | 🕘 **Consultar historial** | Revisa cuándo generaste PDFs con cada carta desde el navegador actual. |
@@ -24,7 +24,7 @@
 
 1. **Entra a la web:** [pokemon-tcg-cartas-0nch.onrender.com](https://pokemon-tcg-cartas-0nch.onrender.com/).
 2. **Explora las expansiones:** selecciona una de la lista o utiliza el buscador de expansiones.
-3. **Encuentra tus cartas:** usa los filtros de nombre, categoría, tipo, habilidad o **Búsqueda General**. En este último campo, pulsa **Buscar** o **Enter** para aplicar la búsqueda.
+3. **Encuentra tus cartas:** usa los filtros de nombre, categoría, **tipo de Pokémon**, **energía en ataques**, habilidad o **Búsqueda General**. El nuevo filtro de energía revisa la energía requerida para ejecutar un ataque, independientemente del tipo del Pokémon: por ejemplo, un Dragón que pide Agua o Fuego. En Búsqueda General, pulsa **Buscar** o **Enter**.
 4. **Abre una carta:** selecciónala para ver su imagen ampliada y navegar entre cartas.
 5. **Añádela a favoritos:** pulsa el corazón 🤍. Cada pulsación suma **una copia** de esa carta y el contador ❤️ muestra el total de copias.
 6. **Elige cuántas copias imprimir:** abre ❤️ **Favoritos** y usa **+** para añadir otra copia o **−** para quitar una. La **✕** elimina todas las copias de esa carta. El contador te indica el total seleccionado.
@@ -39,17 +39,32 @@
 | Cada carta | **63 × 88 mm** |
 | Distribución | **3 columnas × 3 filas** |
 | Cartas por página | **9** |
-| Copias totales por PDF | **Máximo 54** (suma de todas las cantidades) |
+| Copias totales por PDF | **Máximo 180** (20 páginas, suma de todas las cantidades) |
 | Cuadrícula de 9 cartas | **189 × 264 mm** |
 | Márgenes | **10,5 mm laterales / 16,5 mm verticales** |
 
 Las líneas de corte se prolongan hasta los bordes del documento. El tamaño de cada carta se define en el PDF, pero una impresora puede reducirlo si se selecciona alguna opción de ajuste de escala.
 
+## Filtro por energía de ataque
+
+**Tipo de Pokémon** y **Energía en ataques** son filtros distintos que puedes combinar.
+
+- **Tipo de Pokémon: Dragón** muestra cartas cuyo Pokémon es de tipo Dragón.
+- **Energía en ataques: Agua** muestra cartas con al menos un ataque cuyo coste incluye energía Agua, aunque el Pokémon sea de tipo Dragón, Fuego u otro.
+- Si un ataque exige **Agua + Fuego**, la carta aparecerá al filtrar por cualquiera de las dos energías.
+- La opción **Incolora** se refiere a símbolos de coste genérico; no implica que deba usarse una carta de Energía Incolora.
+
+El filtro utiliza el campo `attacks.cost` documentado por [TCGdex](https://tcgdex.dev/es/tcg-live). La disponibilidad de resultados depende de los detalles registrados en la API.
+
+### Generación de PDF de hasta 20 páginas
+
+El PDF mantiene **63 × 88 mm por carta**, las nueve cartas por hoja A4 y las líneas de corte extendidas hasta el borde. Las imágenes se procesan por lotes de una hoja para reducir el consumo de memoria en el servidor. En selecciones grandes, especialmente con muchos diseños distintos, la generación puede tardar más y depende de la respuesta de TCGdex y de los recursos del alojamiento gratuito. El límite de 180 es un máximo configurado de la aplicación, no una garantía de tiempo de generación.
+
 ## Compartir tus cartas favoritas
 
 1. Abre ❤️ **Favoritos** y pulsa **🔗 Compartir favoritos**.
 2. Comparte el enlace generado o cópialo desde el navegador. El enlace incluye las **cantidades seleccionadas**.
-3. Al abrir el enlace, la otra persona podrá importar las cartas y sus copias a sus propios favoritos (hasta el límite disponible de 54 copias).
+3. Al abrir el enlace, la otra persona podrá importar las cartas y sus copias a sus propios favoritos (hasta el límite disponible de 180 copias).
 
 **Importante:** compartir la selección **no** crea una cuenta ni sincroniza automáticamente los cambios posteriores entre dispositivos.
 
@@ -70,7 +85,7 @@ Sí. La web se adapta a pantallas móviles y funciona con un navegador moderno.
 No. Abre el enlace de la aplicación desde tu navegador.
 
 **¿Puedo imprimir varias cartas a la vez?**  
-Sí. Puedes guardar varias copias de una misma carta o combinar cartas distintas. Un PDF admite hasta **54 copias en total**, distribuidas en páginas de nueve cartas.
+Sí. Puedes guardar varias copias de una misma carta o combinar cartas distintas. Un PDF admite hasta **180 copias en total (20 páginas)**, distribuidas en hojas A4 de nueve cartas.
 
 **¿Por qué mis cartas impresas se ven más pequeñas?**  
 Verifica que el visor o la impresora esté configurado en **100 % / Tamaño real**, sin escalado ni ajuste automático.
