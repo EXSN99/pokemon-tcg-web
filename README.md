@@ -14,8 +14,8 @@
 | --- | --- |
 | 🃏 **Explorar cartas** | Visualiza cartas Pokémon TCG en español organizadas por expansiones, con imágenes y vista ampliada. |
 | 🔍 **Buscar y filtrar** | Filtra por expansión, nombre, categoría, tipo y Pokémon con habilidad. También puedes buscar texto en los campos disponibles de las cartas. |
-| ❤️ **Guardar favoritas** | Selecciona las cartas que quieres imprimir. Puedes añadirlas o retirarlas de tu lista. |
-| 📄 **Descargar PDF** | Genera un documento A4 con hasta **9 cartas por hoja**, preparado para imprimir y recortar. |
+| ❤️ **Guardar favoritas y copias** | Añade la misma carta varias veces. Ajusta sus copias con los botones **− / +** antes de exportar. |
+| 📄 **Descargar PDF** | Genera un documento A4 con hasta **9 cartas por hoja** y **54 copias por PDF**, incluidas las cartas repetidas. |
 | ✂️ **Usar guías de corte** | El PDF incluye líneas extendidas hasta los bordes de la página para facilitar el recorte. |
 | 🔗 **Compartir favoritas** | Envía un enlace a otra persona o dispositivo para importar tu selección de cartas. |
 | 🕘 **Consultar historial** | Revisa cuándo generaste PDFs con cada carta desde el navegador actual. |
@@ -26,9 +26,9 @@
 2. **Explora las expansiones:** selecciona una de la lista o utiliza el buscador de expansiones.
 3. **Encuentra tus cartas:** usa los filtros de nombre, categoría, tipo, habilidad o **Búsqueda General**. En este último campo, pulsa **Buscar** o **Enter** para aplicar la búsqueda.
 4. **Abre una carta:** selecciónala para ver su imagen ampliada y navegar entre cartas.
-5. **Añádela a favoritos:** pulsa el corazón 🤍. La selección aparecerá en el botón ❤️ del encabezado.
-6. **Abre tus favoritas:** pulsa ❤️ y revisa las cartas seleccionadas. Allí puedes quitarlas, compartirlas o exportarlas.
-7. **Descarga el PDF:** pulsa **📥 Exportar a PDF**. Si el navegador no descarga el archivo automáticamente, utiliza el enlace **«Abrir o descargar el último PDF»**.
+5. **Añádela a favoritos:** pulsa el corazón 🤍. Cada pulsación suma **una copia** de esa carta y el contador ❤️ muestra el total de copias.
+6. **Elige cuántas copias imprimir:** abre ❤️ **Favoritos** y usa **+** para añadir otra copia o **−** para quitar una. La **✕** elimina todas las copias de esa carta. El contador te indica el total seleccionado.
+7. **Descarga el PDF:** pulsa **📥 Exportar a PDF**. Las cartas repetidas aparecen tantas veces como indiques. Si el navegador no descarga el archivo automáticamente, utiliza **«Abrir o descargar el último PDF»**.
 8. **Imprime y recorta:** imprime el PDF en papel A4 con **escala 100 % / Tamaño real**. No actives «Ajustar a página».
 
 ### Tamaños de impresión
@@ -39,7 +39,7 @@
 | Cada carta | **63 × 88 mm** |
 | Distribución | **3 columnas × 3 filas** |
 | Cartas por página | **9** |
-| Cartas por PDF | **Máximo 54** |
+| Copias totales por PDF | **Máximo 54** (suma de todas las cantidades) |
 | Cuadrícula de 9 cartas | **189 × 264 mm** |
 | Márgenes | **10,5 mm laterales / 16,5 mm verticales** |
 
@@ -48,14 +48,14 @@ Las líneas de corte se prolongan hasta los bordes del documento. El tamaño de 
 ## Compartir tus cartas favoritas
 
 1. Abre ❤️ **Favoritos** y pulsa **🔗 Compartir favoritos**.
-2. Comparte el enlace generado o cópialo desde el navegador.
-3. Al abrir el enlace, la otra persona podrá importar las cartas a sus favoritos en su propio navegador.
+2. Comparte el enlace generado o cópialo desde el navegador. El enlace incluye las **cantidades seleccionadas**.
+3. Al abrir el enlace, la otra persona podrá importar las cartas y sus copias a sus propios favoritos (hasta el límite disponible de 54 copias).
 
 **Importante:** compartir la selección **no** crea una cuenta ni sincroniza automáticamente los cambios posteriores entre dispositivos.
 
 ## Historial y almacenamiento
 
-- Los **favoritos** y el **historial de descargas** se guardan en el navegador mediante almacenamiento local.
+- Los **favoritos**, sus **cantidades** y el **historial de descargas** se guardan en el navegador mediante almacenamiento local. Los favoritos existentes de versiones anteriores se mantienen como una copia por carta.
 - Puedes eliminar favoritos o entradas del historial desde la aplicación.
 - Si borras los datos del navegador o cambias de dispositivo, esa información puede perderse. Puedes usar **Compartir favoritos** para transferir una selección.
 - **Histórico** registra las generaciones de PDF por carta, pero **no conserva copias descargables de los PDF anteriores**.
@@ -70,7 +70,7 @@ Sí. La web se adapta a pantallas móviles y funciona con un navegador moderno.
 No. Abre el enlace de la aplicación desde tu navegador.
 
 **¿Puedo imprimir varias cartas a la vez?**  
-Sí. Guarda hasta 54 cartas en favoritos y exporta un PDF. Se distribuirán en páginas de nueve cartas.
+Sí. Puedes guardar varias copias de una misma carta o combinar cartas distintas. Un PDF admite hasta **54 copias en total**, distribuidas en páginas de nueve cartas.
 
 **¿Por qué mis cartas impresas se ven más pequeñas?**  
 Verifica que el visor o la impresora esté configurado en **100 % / Tamaño real**, sin escalado ni ajuste automático.
