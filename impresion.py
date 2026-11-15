@@ -1,6 +1,5 @@
 """Generación de PDF A4: nueve cartas de 63 x 88 mm por página."""
 from io import BytesIO
-from itertools import islice
 from typing import Iterable
 from PIL import Image
 from reportlab.lib import colors
@@ -52,46 +51,46 @@ def generar_pdf(images: Iterable[Image.Image]) -> bytes:
     pdf = canvas.Canvas(output, pagesize=A4, pageCompression=1)
     pdf.setTitle("Cartas Pokémon TCG para imprimir")
 
+    def terminar_pagina():
+        # Guías de corte hasta los bordes A4, como en la versión original.
+        pdf.setStrokeColor(colors.black)
+        pdf.setLineWidth(0.8)
+        extension = 1 * cm
+        for col in range(COLUMNS + 1):
+            x = x_origin + col * CARD_WIDTH
+            pdf.line(x, -extension, x, height + extension)
+        for row in range(ROWS + 1):
+            y = y_origin + row * CARD_HEIGHT
+            pdf.line(-extension, y, width + extension, y)
+        pdf.showPage()
+
     iterator = iter(images)
-    paginas = 0
+    cantidad = 0
     try:
-        while True:
-            pagina_imagenes = list(islice(iterator, CARDS_PER_PAGE))
-            if not pagina_imagenes:
-                break
-
-            for index, image in enumerate(pagina_imagenes):
-                row, col = divmod(index, COLUMNS)
-                x = x_origin + col * CARD_WIDTH
-                y = y_origin + (ROWS - 1 - row) * CARD_HEIGHT
-                cropped = _crop_to_card(image)
-                try:
-                    pdf.drawImage(ImageReader(cropped), x, y,
-                                  width=CARD_WIDTH, height=CARD_HEIGHT,
-                                  preserveAspectRatio=False)
-                finally:
-                    cropped.close()
-
-            # Guías de corte hasta los bordes A4, como en la versión original.
-            pdf.setStrokeColor(colors.black)
-            pdf.setLineWidth(0.8)
-            extension = 1 * cm
-            for col in range(COLUMNS + 1):
-                x = x_origin + col * CARD_WIDTH
-                pdf.line(x, -extension, x, height + extension)
-            for row in range(ROWS + 1):
-                y = y_origin + row * CARD_HEIGHT
-                pdf.line(-extension, y, width + extension, y)
-
-            pdf.showPage()
-            paginas += 1
+        # Dibujar una carta tan pronto como llega. No preconsumir la última hoja:
+        # un generador bajo demanda puede liberar sus imágenes al agotarse.
+        for image in iterator:
+            row, col = divmod(cantidad % CARDS_PER_PAGE, COLUMNS)
+            x = x_origin + col * CARD_WIDTH
+            y = y_origin + (ROWS - 1 - row) * CARD_HEIGHT
+            cropped = _crop_to_card(image)
+            try:
+                pdf.drawImage(ImageReader(cropped), x, y,
+                              width=CARD_WIDTH, height=CARD_HEIGHT,
+                              preserveAspectRatio=False)
+            finally:
+                cropped.close()
+            cantidad += 1
+            if cantidad % CARDS_PER_PAGE == 0:
+                terminar_pagina()
     finally:
-        # Cierra generadores bajo demanda incluso ante errores a mitad del PDF.
         close = getattr(iterator, "close", None)
         if callable(close):
             close()
 
-    if paginas == 0:
+    if cantidad == 0:
         raise ValueError("No se recibieron imágenes para el PDF")
+    if cantidad % CARDS_PER_PAGE:
+        terminar_pagina()
     pdf.save()
     return output.getvalue()
