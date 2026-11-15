@@ -71,16 +71,16 @@ test('los botones restan copias, y al llegar a cero eliminan la carta', () => {
     assert.equal(app.counter.textContent, 0);
 });
 
-test('limita las nuevas copias a 54 y no borra favoritos históricos mayores', () => {
-    const ids = Array.from({length: 55}, (_, i) => ({id: 'tcg-' + String(i).padStart(3, '0'), name: 'Carta ' + i}));
+test('limita las nuevas copias a 180 y no borra favoritos históricos mayores', () => {
+    const ids = Array.from({length: 181}, (_, i) => ({id: 'tcg-' + String(i).padStart(3, '0'), name: 'Carta ' + i}));
     const app = prepararApp(ids);
-    assert.equal(app.current().length, 55);
+    assert.equal(app.current().length, 181);
     const added = app.eval("agregarCartaGuardada({id: 'extra-10', name: 'Nueva'})");
     assert.equal(added, false);
-    assert.equal(app.current().length, 55);
-    const nuevo = prepararApp([{id: 'swsh3-136', name: 'Pikachu', cantidad: 54}]);
+    assert.equal(app.current().length, 181);
+    const nuevo = prepararApp([{id: 'swsh3-136', name: 'Pikachu', cantidad: 180}]);
     assert.equal(nuevo.eval("agregarCartaGuardada({id: 'swsh3-136'})"), false);
-    assert.equal(nuevo.current()[0].cantidad, 54);
+    assert.equal(nuevo.current()[0].cantidad, 180);
 });
 
 test('comparte e importa enlaces con copias repetidas', async () => {
