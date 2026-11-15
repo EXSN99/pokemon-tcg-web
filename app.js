@@ -45,14 +45,52 @@ const filtroAtaqueTexto = document.createElement('input');
 const buscadorExpansiones = document.getElementById('buscador-expansiones');
 
 // Funciones para el manejo de cartas guardadas
-function cargarCartasGuardadas() {
-    const cartasStorage = localStorage.getItem(STORAGE_KEY);
-    if (cartasStorage) {
-        cartasGuardadas = JSON.parse(cartasStorage);
-        actualizarContadorCartas();
+// El catálogo guarda una entrada por carta con la cantidad de copias a imprimir.
+// Los favoritos anteriores (sin "cantidad") se interpretan como una copia.
+function cantidadDeCarta(carta) {
+    const cantidad = Number(carta?.cantidad);
+    return Number.isSafeInteger(cantidad) && cantidad > 0 ? Math.min(cantidad, LIMITE_PDF) : 1;
+}
+
+function obtenerCantidadFavorita(id) {
+    const carta = cartasGuardadas.find(c => c.id === id);
+    return carta ? cantidadDeCarta(carta) : 0;
+}
+
+function obtenerTotalCopiasFavoritas() {
+    return cartasGuardadas.reduce((total, carta) => total + cantidadDeCarta(carta), 0);
+}
+
+function normalizarCartasGuardadas(datos) {
+    if (!Array.isArray(datos)) return [];
+    const normalizadas = [];
+    let total = 0;
+    for (const carta of datos) {
+        if (!carta || typeof carta.id !== 'string' || !/^[a-zA-Z0-9_.-]{3,72}$/.test(carta.id)) continue;
+        const cantidad = Math.min(cantidadDeCarta(carta), LIMITE_PDF - total);
+        if (cantidad <= 0) break;
+        const existente = normalizadas.find(c => c.id === carta.id);
+        if (existente) existente.cantidad += cantidad;
+        else normalizadas.push({ ...carta, cantidad });
+        total += cantidad;
     }
-    
-    // Cargar el registro de descargas
+    return normalizadas;
+}
+
+function obtenerIdsParaPDF() {
+    return cartasGuardadas.flatMap(carta => Array(cantidadDeCarta(carta)).fill(carta.id));
+}
+
+function cargarCartasGuardadas() {
+    try {
+        cartasGuardadas = normalizarCartasGuardadas(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
+    } catch (error) {
+        console.warn('No se pudieron leer los favoritos anteriores:', error);
+        cartasGuardadas = [];
+    }
+    // Migración transparente: los favoritos antiguos se conservan con cantidad 1.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cartasGuardadas));
+    actualizarContadorCartas();
     if (!localStorage.getItem(STORAGE_KEY_DOWNLOADS)) {
         localStorage.setItem(STORAGE_KEY_DOWNLOADS, JSON.stringify({}));
     }
@@ -61,14 +99,37 @@ function cargarCartasGuardadas() {
 function guardarCartasEnStorage() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cartasGuardadas));
     actualizarContadorCartas();
+    actualizarVistaFavoritos();
+    actualizarBotonesAgregar();
 }
 
 function agregarCartaGuardada(carta) {
-    if (!cartasGuardadas.some(c => c.id === carta.id)) {
-        cartasGuardadas.push(carta);
-        guardarCartasEnStorage();
-        mostrarNotificacion('Carta añadida a favoritos');
+    if (obtenerTotalCopiasFavoritas() >= LIMITE_PDF) {
+        mostrarNotificacion('Máximo de ' + LIMITE_PDF + ' copias por PDF');
+        return false;
     }
+    const existente = cartasGuardadas.find(c => c.id === carta.id);
+    if (existente) existente.cantidad = cantidadDeCarta(existente) + 1;
+    else cartasGuardadas.push({ ...carta, cantidad: 1 });
+    guardarCartasEnStorage();
+    mostrarNotificacion('Copia añadida: ' + obtenerCantidadFavorita(carta.id));
+    return true;
+}
+
+function cambiarCantidadCarta(cartaId, cambio) {
+    const carta = cartasGuardadas.find(c => c.id === cartaId);
+    if (!carta || !Number.isInteger(cambio) || cambio === 0) return;
+    if (cambio > 0 && obtenerTotalCopiasFavoritas() + cambio > LIMITE_PDF) {
+        mostrarNotificacion('Máximo de ' + LIMITE_PDF + ' copias por PDF');
+        return;
+    }
+    const nuevaCantidad = cantidadDeCarta(carta) + cambio;
+    if (nuevaCantidad <= 0) {
+        eliminarCartaGuardada(cartaId);
+        return;
+    }
+    carta.cantidad = nuevaCantidad;
+    guardarCartasEnStorage();
 }
 
 function eliminarCartaGuardada(cartaId) {
@@ -80,7 +141,49 @@ function eliminarCartaGuardada(cartaId) {
 function actualizarContadorCartas() {
     const contador = document.getElementById('contador-cartas');
     if (contador) {
-        contador.textContent = cartasGuardadas.length;
+        contador.textContent = obtenerTotalCopiasFavoritas();
+        contador.title = obtenerTotalCopiasFavoritas() + ' copias en ' + cartasGuardadas.length + ' cartas diferentes';
+    }
+}
+
+function actualizarBotonesAgregar() {
+    document.querySelectorAll('[data-tcg-agregar]').forEach(boton => {
+        const cantidad = obtenerCantidadFavorita(boton.dataset.tcgAgregar);
+        if (boton.dataset.modo === 'detalle') {
+            boton.textContent = cantidad ? '❤️ Añadir otra (' + cantidad + ')' : '🤍 Añadir a favoritos';
+        } else {
+            boton.textContent = cantidad ? '❤️ ' + cantidad + ' +' : '🤍 +';
+        }
+        boton.title = 'Añadir una copia más; ' + cantidad + ' seleccionadas';
+        boton.setAttribute('aria-label', boton.title);
+        boton.disabled = obtenerTotalCopiasFavoritas() >= LIMITE_PDF;
+    });
+}
+
+function actualizarVistaFavoritos() {
+    const modalGuardadas = document.getElementById('modal-guardadas');
+    if (!modalGuardadas) return;
+    const grid = modalGuardadas.querySelector('.cards-grid');
+    if (!grid) return;
+    grid.replaceChildren();
+    const titulo = modalGuardadas.querySelector('.titulo-favoritos');
+    if (titulo) {
+        titulo.textContent = 'Favoritos: ' + obtenerTotalCopiasFavoritas()
+            + ' copias de ' + cartasGuardadas.length + ' cartas';
+    }
+    for (const carta of cartasGuardadas) {
+        const elemento = crearElementoCarta(carta, true);
+        if (elemento) grid.appendChild(elemento);
+    }
+    if (!cartasGuardadas.length) {
+        const aviso = document.createElement('p');
+        aviso.className = 'no-cards';
+        aviso.textContent = 'No hay cartas guardadas';
+        grid.appendChild(aviso);
+    }
+    for (const selector of ['.btn-exportar', '.btn-compartir', '.btn-limpiar']) {
+        const boton = modalGuardadas.querySelector(selector);
+        if (boton) boton.disabled = cartasGuardadas.length === 0;
     }
 }
 
@@ -120,7 +223,8 @@ function mostrarCartasGuardadas() {
     };
     
     const titulo = document.createElement('h2');
-    titulo.textContent = 'Cartas Guardadas';
+    titulo.textContent = 'Favoritos';
+    titulo.className = 'titulo-favoritos';
     titulo.style.marginBottom = '20px';
     
     // Crear contenedor para los botones
@@ -152,20 +256,7 @@ function mostrarCartasGuardadas() {
     grid.style.overflowY = 'auto';
     grid.style.padding = '10px';
     
-    if (cartasGuardadas.length === 0) {
-        const mensaje = document.createElement('p');
-        mensaje.className = 'no-cards';
-        mensaje.textContent = 'No hay cartas guardadas';
-        mensaje.style.gridColumn = '1 / -1';
-        grid.appendChild(mensaje);
-    } else {
-        cartasGuardadas.forEach(carta => {
-            const cardElement = crearElementoCarta(carta, true);
-            if (cardElement) {
-                grid.appendChild(cardElement);
-            }
-        });
-    }
+    // La vista se genera después de insertar el modal en el DOM.
     
     contenido.appendChild(cerrar);
     contenido.appendChild(titulo);
@@ -190,6 +281,7 @@ function mostrarCartasGuardadas() {
     document.addEventListener('keydown', handleEscapeGuardadas);
     
     document.body.appendChild(modalCartasGuardadas);
+    actualizarVistaFavoritos();
 }
 
 function marcarCartaComoDescargada(cartaId, fecha) {
@@ -209,15 +301,16 @@ function obtenerDescargas(cartaId) {
 // PDF generado por Flask sin subir imágenes desde el navegador
 async function exportarCartasAPDF() {
     if (!cartasGuardadas.length) { mostrarNotificacion('Agrega cartas antes de exportar'); return; }
-    if (cartasGuardadas.length > LIMITE_PDF) {
-        mostrarNotificacion('El máximo permitido es '+LIMITE_PDF+' cartas por PDF'); return;
+    const idsParaPDF = obtenerIdsParaPDF();
+    if (idsParaPDF.length > LIMITE_PDF) {
+        mostrarNotificacion('El máximo permitido es '+LIMITE_PDF+' copias por PDF'); return;
     }
     const btn = document.querySelector('.btn-exportar');
     try {
         if (btn) { btn.disabled = true; btn.textContent = 'Preparando PDF…'; }
         const response = await fetch('/api/pdf', {
             method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ids: cartasGuardadas.map(c => c.id)})
+            body: JSON.stringify({ids: idsParaPDF})
         });
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
@@ -226,7 +319,7 @@ async function exportarCartasAPDF() {
         const blob = await response.blob();
         if (!blob.size || !blob.type.includes('pdf')) throw new Error('PDF no válido');
         const url = URL.createObjectURL(blob);
-        const nombre = 'pokemon_tcg_'+cartasGuardadas.length+'_cartas.pdf';
+        const nombre = 'pokemon_tcg_'+idsParaPDF.length+'_cartas.pdf';
         const old = document.querySelector('#enlace-ultimo-pdf');
         if (old) { URL.revokeObjectURL(old.href); old.remove(); }
         const link = document.createElement('a');
@@ -243,24 +336,58 @@ async function exportarCartasAPDF() {
     finally { if(btn) {btn.disabled=false; btn.textContent='📥 Exportar a PDF';} }
 }
 async function compartirFavoritos() {
-    if (!cartasGuardadas.length) { mostrarNotificacion('No hay cartas para compartir'); return; }
-    const u=new URL(location.href); u.searchParams.set('favoritos',cartasGuardadas.map(c=>c.id).join(','));u.hash='';
+    const ids = obtenerIdsParaPDF();
+    if (!ids.length) { mostrarNotificacion('No hay cartas para compartir'); return; }
+    // IDs repetidos representan las copias y conservan compatibilidad con enlaces anteriores.
+    const u = new URL(location.href);
+    u.searchParams.set('favoritos', ids.join(','));
+    u.hash = '';
     try {
-        if(navigator.share) await navigator.share({title:'Cartas Pokémon',url:u.toString()});
-        else if(navigator.clipboard?.writeText) {await navigator.clipboard.writeText(u.toString()); mostrarNotificacion('Enlace copiado');}
-        else window.prompt('Copia este enlace:',u.toString());
-    } catch(e){if(e.name!=='AbortError') mostrarNotificacion('No se pudo compartir');}
-}
-async function importarFavoritosDesdeEnlace(){
-    const raw=new URLSearchParams(location.search).get('favoritos'); if(!raw)return;
-    const ids=[...new Set(raw.split(',').filter(id=>/^[a-zA-Z0-9_.-]{3,72}$/.test(id)))].slice(0,LIMITE_PDF)
-        .filter(id=>!cartasGuardadas.some(c=>c.id===id));
-    let total=0;
-    for(let i=0;i<ids.length;i+=5){
-        const cards=await Promise.all(ids.slice(i,i+5).map(id=>fetchAPI('cards/'+encodeURIComponent(id)).catch(()=>null)));
-        for(const card of cards)if(card?.id&&!cartasGuardadas.some(c=>c.id===card.id)){cartasGuardadas.push(card);total++;}
+        if (navigator.share) await navigator.share({title: 'Cartas Pokémon', url: u.toString()});
+        else if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(u.toString());
+            mostrarNotificacion('Enlace copiado con las cantidades');
+        } else window.prompt('Copia este enlace:', u.toString());
+    } catch (error) {
+        if (error.name !== 'AbortError') mostrarNotificacion('No se pudo compartir');
     }
-    if(total){guardarCartasEnStorage();mostrarNotificacion(total+' cartas importadas');}
+}
+
+async function importarFavoritosDesdeEnlace() {
+    const raw = new URLSearchParams(location.search).get('favoritos');
+    if (!raw) return;
+    const ids = raw.split(',')
+        .filter(id => /^[a-zA-Z0-9_.-]{3,72}$/.test(id))
+        .slice(0, LIMITE_PDF);
+    const espacio = Math.max(0, LIMITE_PDF - obtenerTotalCopiasFavoritas());
+    const cantidades = new Map();
+    for (const id of ids.slice(0, espacio)) {
+        cantidades.set(id, (cantidades.get(id) || 0) + 1);
+    }
+    let total = 0;
+    const pendientes = [];
+    for (const [id, cantidad] of cantidades) {
+        const existente = cartasGuardadas.find(c => c.id === id);
+        if (existente) {
+            existente.cantidad = cantidadDeCarta(existente) + cantidad;
+            total += cantidad;
+        } else pendientes.push({id, cantidad});
+    }
+    for (let i = 0; i < pendientes.length; i += 5) {
+        const lote = pendientes.slice(i, i + 5);
+        const cartas = await Promise.all(lote.map(({id}) =>
+            fetchAPI('cards/' + encodeURIComponent(id)).catch(() => null)));
+        cartas.forEach((carta, index) => {
+            if (carta?.id === lote[index].id) {
+                cartasGuardadas.push({ ...carta, cantidad: lote[index].cantidad });
+                total += lote[index].cantidad;
+            }
+        });
+    }
+    if (total) {
+        guardarCartasEnStorage();
+        mostrarNotificacion(total + ' copias importadas a favoritos');
+    }
 }
 
 // Inicializar la aplicación
@@ -820,35 +947,32 @@ function crearElementoCarta(carta, esGuardada = false) {
         cardDiv.appendChild(descargaIndicador);
     }
 
-    // Añadir botón de guardar
+    // En el catálogo, cada clic en el corazón agrega UNA COPIA.
+    // En Favoritos, la X elimina todas las copias de esa carta.
     const btnGuardar = document.createElement('button');
     btnGuardar.className = 'btn-guardar';
-    btnGuardar.innerHTML = cartasGuardadas.some(c => c.id === carta.id) ? '❤️' : '🤍';
-    
-    btnGuardar.onclick = (e) => {
-        e.stopPropagation(); // Evitar que se abra el modal de detalles
-        if (cartasGuardadas.some(c => c.id === carta.id)) {
+    btnGuardar.type = 'button';
+    if (esGuardada) {
+        btnGuardar.textContent = '✕';
+        btnGuardar.title = 'Quitar esta carta y todas sus copias';
+        btnGuardar.setAttribute('aria-label', btnGuardar.title);
+        btnGuardar.onclick = (evento) => {
+            evento.stopPropagation();
             eliminarCartaGuardada(carta.id);
-            btnGuardar.innerHTML = '🤍';
-            // Si estamos en el modal de cartas guardadas, eliminar la carta visualmente
-            const modalGuardadas = document.getElementById('modal-guardadas');
-            if (modalGuardadas && esGuardada) {
-                cardDiv.remove();
-                // Si no quedan cartas, mostrar mensaje
-                const grid = modalGuardadas.querySelector('.cards-grid');
-                if (grid && grid.children.length === 0) {
-                    const mensaje = document.createElement('p');
-                    mensaje.className = 'no-cards';
-                    mensaje.textContent = 'No hay cartas guardadas';
-                    mensaje.style.gridColumn = '1 / -1';
-                    grid.appendChild(mensaje);
-                }
-            }
-        } else {
+        };
+    } else {
+        btnGuardar.dataset.tcgAgregar = carta.id;
+        btnGuardar.dataset.modo = 'lista';
+        const cantidad = obtenerCantidadFavorita(carta.id);
+        btnGuardar.textContent = cantidad ? '❤️ ' + cantidad + ' +' : '🤍 +';
+        btnGuardar.title = 'Añadir una copia más; ' + cantidad + ' seleccionadas';
+        btnGuardar.setAttribute('aria-label', btnGuardar.title);
+        btnGuardar.disabled = obtenerTotalCopiasFavoritas() >= LIMITE_PDF;
+        btnGuardar.onclick = (evento) => {
+            evento.stopPropagation();
             agregarCartaGuardada(carta);
-            btnGuardar.innerHTML = '❤️';
-        }
-    };
+        };
+    }
 
     // Añadir evento para mostrar detalles al hacer clic
     cardDiv.addEventListener('click', () => mostrarDetalleCarta(carta, null, esGuardada));
@@ -890,6 +1014,40 @@ function crearElementoCarta(carta, esGuardada = false) {
         cardDiv.appendChild(noImageDiv);
     }
     cardDiv.appendChild(infoDiv);
+
+    if (esGuardada) {
+        const controles = document.createElement('div');
+        controles.className = 'cantidad-controles';
+
+        const menos = document.createElement('button');
+        menos.type = 'button';
+        menos.className = 'cantidad-menos';
+        menos.textContent = '−';
+        menos.title = 'Quitar una copia';
+        menos.setAttribute('aria-label', 'Quitar una copia de ' + carta.name);
+        menos.onclick = (evento) => {
+            evento.stopPropagation();
+            cambiarCantidadCarta(carta.id, -1);
+        };
+
+        const cantidad = document.createElement('span');
+        cantidad.className = 'cantidad-valor';
+        cantidad.textContent = obtenerCantidadFavorita(carta.id) + ' copias';
+
+        const mas = document.createElement('button');
+        mas.type = 'button';
+        mas.className = 'cantidad-mas';
+        mas.textContent = '+';
+        mas.title = 'Agregar otra copia';
+        mas.setAttribute('aria-label', 'Agregar una copia de ' + carta.name);
+        mas.disabled = obtenerTotalCopiasFavoritas() >= LIMITE_PDF;
+        mas.onclick = (evento) => {
+            evento.stopPropagation();
+            cambiarCantidadCarta(carta.id, 1);
+        };
+        controles.append(menos, cantidad, mas);
+        cardDiv.appendChild(controles);
+    }
     return cardDiv;
 }
 
@@ -1009,23 +1167,22 @@ async function mostrarDetalleCarta(carta, indice = null, desdeGuardadas = false)
         
         mainContainer.appendChild(imageContainer);
         
-        // Botón para agregar o quitar de favoritos
+        // Permite agregar varias copias sin cerrar el detalle.
         const btnFavorito = document.createElement('button');
         btnFavorito.className = 'btn-guardar btn-guardar-detalle';
-        const yaGuardada = cartasGuardadas.some(c => c.id === detallesCarta.id);
-        btnFavorito.innerHTML = yaGuardada ? '❤️ Quitar de favoritos' : '🤍 Añadir a favoritos';
-        btnFavorito.onclick = (e) => {
-            e.stopPropagation();
-            if (cartasGuardadas.some(c => c.id === detallesCarta.id)) {
-                eliminarCartaGuardada(detallesCarta.id);
-                btnFavorito.innerHTML = '🤍 Añadir a favoritos';
-            } else {
-                agregarCartaGuardada(detallesCarta);
-                btnFavorito.innerHTML = '❤️ Quitar de favoritos';
-            }
+        btnFavorito.type = 'button';
+        btnFavorito.dataset.tcgAgregar = detallesCarta.id;
+        btnFavorito.dataset.modo = 'detalle';
+        const cantidadFavorita = obtenerCantidadFavorita(detallesCarta.id);
+        btnFavorito.textContent = cantidadFavorita
+            ? '❤️ Añadir otra (' + cantidadFavorita + ')' : '🤍 Añadir a favoritos';
+        btnFavorito.disabled = obtenerTotalCopiasFavoritas() >= LIMITE_PDF;
+        btnFavorito.onclick = (evento) => {
+            evento.stopPropagation();
+            agregarCartaGuardada(detallesCarta);
         };
         mainContainer.appendChild(btnFavorito);
-        
+
         // Añadir el contenedor principal al detalle
         detalleDiv.appendChild(mainContainer);
         
@@ -1525,10 +1682,5 @@ function limpiarFavoritos() {
         cartasGuardadas = [];
         guardarCartasEnStorage();
         mostrarNotificacion('Se han eliminado todas las cartas guardadas');
-        const modalGuardadas = document.getElementById('modal-guardadas');
-        if (modalGuardadas) {
-            modalGuardadas.remove();
-            mostrarCartasGuardadas();
-        }
     }
 }
