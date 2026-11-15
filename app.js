@@ -442,6 +442,7 @@ function inicializarApp() {
     configurarFiltroEnergiaAtaque();
     configurarFiltroAtaque();
     configurarFiltroHabilidad();
+    configurarFiltroImagen();
     configurarBuscadorExpansiones();
     
     // Ocultar el spinner de cartas al inicio
@@ -921,6 +922,26 @@ function configurarFiltroHabilidad() {
     });
 }
 
+// Por defecto solo mostramos cartas que la API declara imprimibles con imagen.
+// El usuario puede incluir cartas sin escaneo desmarcando el criterio.
+function configurarFiltroImagen() {
+    const contenedor = document.querySelector('.filtro-container');
+    const fila = document.createElement('div');
+    fila.className = 'checkbox-container';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = 'filtro-solo-imagen';
+    checkbox.className = 'filtro-checkbox';
+    checkbox.checked = true;
+    const etiqueta = document.createElement('label');
+    etiqueta.className = 'checkbox-label';
+    etiqueta.htmlFor = 'filtro-solo-imagen';
+    etiqueta.textContent = 'Mostrar solo cartas con imagen disponible';
+    fila.append(checkbox, etiqueta);
+    contenedor.appendChild(fila);
+    checkbox.addEventListener('change', aplicarFiltros);
+}
+
 // Configurar el buscador de expansiones
 function configurarBuscadorExpansiones() {
     if (!buscadorExpansiones) return;
@@ -1165,8 +1186,9 @@ function mostrarCartas(cartas) {
 
 // Crear elemento HTML para una carta
 function crearElementoCarta(carta, esGuardada = false) {
-    // Intentar generar URL directamente desde el ID
-    const directUrl = generateCardImageUrl(carta.id);
+    // Usar el campo image publicado por TCGdex. Nunca inventar rutas por ID.
+    const imagenes = urlsAlternativasCarta(carta, 'low');
+    const directUrl = imagenes[0] || null;
 
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
@@ -1247,11 +1269,17 @@ function crearElementoCarta(carta, esGuardada = false) {
         img.src = directUrl;
         img.alt = carta.name;
         img.loading = 'lazy';
+        let intento = 0;
         img.onerror = function() {
+            intento++;
+            if (intento < imagenes.length) {
+                img.src = imagenes[intento];
+                return;
+            }
             const noImageDiv = document.createElement('div');
             noImageDiv.className = 'no-image';
-            noImageDiv.textContent = 'Imagen no disponible';
-            cardDiv.replaceChild(noImageDiv, img);
+            noImageDiv.textContent = 'Escaneo no disponible en TCGdex';
+            if (img.parentNode === cardDiv) cardDiv.replaceChild(noImageDiv, img);
         };
         cardDiv.appendChild(btnGuardar);
         cardDiv.appendChild(img);
@@ -1361,8 +1389,9 @@ async function mostrarDetalleCarta(carta, indice = null, desdeGuardadas = false)
             imageContainer.appendChild(expansionBadge);
         }
         
-        // Intentar generar URL directamente desde el ID
-        const directUrl = generateCardImageUrl(detallesCarta.id);
+        // Fuente oficial proporcionada por TCGdex, con calidad alta.
+        const imagenesDetalle = urlsAlternativasCarta(detallesCarta, 'high');
+        const directUrl = imagenesDetalle[0] || null;
         
         if (directUrl) {
             // Crear la imagen principal
@@ -1370,11 +1399,17 @@ async function mostrarDetalleCarta(carta, indice = null, desdeGuardadas = false)
             img.src = directUrl;
             img.alt = detallesCarta.name;
             
+            let intento = 0;
             img.onerror = function() {
+                intento++;
+                if (intento < imagenesDetalle.length) {
+                    img.src = imagenesDetalle[intento];
+                    return;
+                }
                 const noImageDiv = document.createElement('div');
                 noImageDiv.className = 'no-image-detail';
-                noImageDiv.textContent = 'Imagen no disponible';
-                imageContainer.replaceChild(noImageDiv, img);
+                noImageDiv.textContent = 'Escaneo no disponible en TCGdex';
+                if (img.parentNode === imageContainer) imageContainer.replaceChild(noImageDiv, img);
             };
             
             imageContainer.appendChild(img);
@@ -1635,42 +1670,16 @@ function formatImageUrl(baseUrl) {
     }
 }
 
-// Función para generar URL de imagen directamente desde los IDs
-function generateCardImageUrl(cardId) {
-    if (!cardId) return null;
-    
-    try {
-        // Dividir el ID de la carta (ejemplo: swsh4-2)
-        let parts = cardId.split('-');
-        
-        // Si no tiene el formato esperado, intentar otros formatos
-        if (parts.length !== 2) {
-            // Intentar con formato alternativo (ejemplo: swsh4.5-2)
-            const match = cardId.match(/([a-z]+\d+(?:\.\d+)?)-(.+)/i);
-            if (match) {
-                parts = [match[1], match[2]];
-            } else {
-                return null;
-            }
-        }
-        
-        const setId = parts[0]; // swsh4
-        const localId = parts[1]; // 2
-        
-        // Extraer la serie (ejemplo: swsh4 -> swsh)
-        let serieId = setId;
-        const serieMatch = setId.match(/([a-z]+)\d*(?:\.\d+)?/i);
-        if (serieMatch) {
-            serieId = serieMatch[1];
-        }
-        
-        // Construir la URL según la documentación
-        // https://assets.tcgdex.net/en/swsh/swsh3/136/high.png
-        const url = `https://assets.tcgdex.net/${IDIOMA}/${serieId}/${setId}/${localId}/${IMAGEN_CALIDAD}.${IMAGEN_EXTENSION}`;
-        return url;
-    } catch (error) {
-        return null;
-    }
+// Solo URLs que nacen del campo image de TCGdex, nunca a partir de IDs.
+function urlsAlternativasCarta(carta, calidad = 'low') {
+    const base = baseImagenCarta(carta);
+    if (!base) return [];
+    if (/\.(?:png|jpg|webp)$/i.test(base)) return [base];
+    const origen = base.replace(/\/$/, '');
+    const alternativos = calidad === 'high'
+        ? ['high.webp', 'high.png', 'low.webp']
+        : ['low.webp', 'low.png', 'high.webp'];
+    return alternativos.map(sufijo => origen + '/' + sufijo);
 }
 
 // Cargar los tipos de Pokémon
