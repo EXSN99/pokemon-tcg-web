@@ -611,24 +611,63 @@ function coincideTextoCarta(carta, texto) {
 // cientos de solicitudes repetidas a TCGdex. El coste de las cartas todavía
 // no indexadas se consulta bajo demanda con concurrencia limitada.
 let promesaIndiceEnergia = null;
+let indiceCartasActivo = null;
+
+// No usar URLs construidas a partir del ID. Las imágenes de TCGdex son
+// opcionales y su ruta oficial figura en el campo image del catálogo.
+function baseImagenCarta(carta) {
+    const id = carta?.id;
+    if (!id) return null;
+    const origen = carta.image
+        || indiceCartasActivo?.catalog?.[id]?.image
+        || indiceCartasActivo?.cards?.[id]?.image;
+    if (typeof origen !== 'string'
+        || !origen.startsWith('https://assets.tcgdex.net/')) return null;
+    return origen;
+}
+
+function urlImagenCarta(carta, calidad = 'low') {
+    const base = baseImagenCarta(carta);
+    if (!base) return null;
+    return /\.(?:png|jpg|webp)$/i.test(base)
+        ? base : base.replace(/\/$/, '') + '/' + calidad + '.webp';
+}
+
+function normalizarTextoIndice(valor) {
+    return String(valor || '').normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim()
+        .replace(/\s+/g, ' ');
+}
+
+function mostrarEstadoBusqueda(texto, esAdvertencia = false) {
+    const elemento = document.getElementById('estado-busqueda');
+    if (!elemento) return;
+    elemento.textContent = texto || '';
+    elemento.className = esAdvertencia ? 'estado-busqueda advertencia' : 'estado-busqueda';
+    elemento.style.display = texto ? 'block' : 'none';
+}
 
 async function cargarIndiceEnergia() {
     if (!promesaIndiceEnergia) {
         promesaIndiceEnergia = (async () => {
             try {
                 if (typeof fetch !== 'function') throw new Error('fetch no disponible');
-                const respuesta = await fetch('/data/energy-index.json', {cache: 'no-store'});
-                if (!respuesta.ok) throw new Error('HTTP ' + respuesta.status);
-                const indice = await respuesta.json();
-                if (indice?.schemaVersion !== 1 || indice.language !== 'es'
+                const response = await fetch('/data/energy-index.json', {cache: 'no-store'});
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const indice = await response.json();
+                if (![1, 2].includes(indice?.schemaVersion)
+                    || indice.language !== 'es'
                     || !indice.cards || typeof indice.cards !== 'object'
                     || Array.isArray(indice.cards)) {
-                    throw new Error('Formato de índice de energía inválido');
+                    throw new Error('Índice incompatible');
                 }
+                indiceCartasActivo = indice;
                 return indice;
             } catch (error) {
-                console.warn('Índice no disponible; se usarán consultas TCGdex:', error);
-                return {cards: {}, indexedCount: 0, catalogSize: 0, complete: false};
+                console.warn('Índice no disponible; búsqueda limitada a TCGdex:', error);
+                indiceCartasActivo = null;
+                return {cards: {}, catalog: {}, indexedCount: 0,
+                    searchIndexedCount: 0, catalogSize: 0, complete: false};
             }
         })();
     }
@@ -636,12 +675,13 @@ async function cargarIndiceEnergia() {
     const estado = document.getElementById('energia-indice-estado');
     if (estado) {
         const total = Number(indice.catalogSize) || 0;
-        const indexed = Number(indice.indexedCount) || 0;
+        const energias = Number(indice.indexedCount) || 0;
+        const texto = Number(indice.searchIndexedCount) || 0;
         estado.textContent = total
-            ? 'Índice de energías: ' + indexed.toLocaleString('es-PE') + ' / '
-                + total.toLocaleString('es-PE') + ' cartas'
-                + (indice.complete ? ' · completo' : ' · actualizándose diariamente')
-            : 'Índice en preparación; algunas cartas se consultarán directamente a TCGdex';
+            ? 'Índice: ' + energias.toLocaleString('es-PE') + '/'
+                + total.toLocaleString('es-PE') + ' energías · '
+                + texto.toLocaleString('es-PE') + ' textos completos'
+            : 'Índice en preparación; búsqueda por detalles temporal';
     }
     return indice;
 }
