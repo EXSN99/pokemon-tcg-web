@@ -90,19 +90,23 @@ def create_pdf():
         return jsonify(error=f"Selecciona entre 1 y {MAX_CARDS} cartas."), 400
     if any(not isinstance(item, str) or not CARD_ID_RE.fullmatch(item) for item in ids):
         return jsonify(error="Se encontraron identificadores de carta inválidos."), 400
+    # Se descargan las imágenes de IDs únicos una sola vez.
+    # Las copias solicitadas se repiten al crear el PDF, sin llamadas extra a TCGdex.
+    ids_unicos = list(dict.fromkeys(ids))
     try:
         with ThreadPoolExecutor(max_workers=4) as pool:
-            images = list(pool.map(_get_image, ids))
+            imagenes_unicas = list(pool.map(_get_image, ids_unicos))
     except (requests.RequestException, ValueError, OSError) as exc:
         app.logger.warning("PDF no generado: %s", exc)
         return jsonify(error=f"No se pudo obtener una de las cartas: {exc}"), 422
     try:
-        pdf = generar_pdf(images)
+        imagenes_por_id = dict(zip(ids_unicos, imagenes_unicas))
+        pdf = generar_pdf([imagenes_por_id[carta_id] for carta_id in ids])
     except Exception:
         app.logger.exception("Fallo al crear PDF")
         return jsonify(error="No se pudo crear el documento PDF."), 500
     finally:
-        for image in images:
+        for image in imagenes_unicas:
             image.close()
     date = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     return send_file(
