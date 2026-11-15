@@ -697,77 +697,91 @@ function coincideEnergiaIndexada(costos, seleccion, modo) {
 async function resolverDetallesEnergia(resumenes, version, seleccion, modo, textoGeneral) {
     const indice = await cargarIndiceEnergia();
     if (version !== versionBusqueda) return null;
+    const termino = normalizarTextoIndice(textoGeneral);
     const aceptadas = new Map();
     const pendientes = [];
 
     for (const resumen of resumenes) {
-        const detalles = cacheDetallesEnergia.get(resumen.id);
-        if (detalles) {
-            if (coincideEnergia(detalles, seleccion, modo)
-                && (!textoGeneral || coincideTextoCarta(detalles, textoGeneral))) {
-                aceptadas.set(resumen.id, detalles);
+        if (!resumen || typeof resumen.id !== 'string') continue;
+        const entrada = indice.cards[resumen.id];
+        const catalogo = indice.catalog?.[resumen.id] || {};
+        const nombre = resumen.name || catalogo.name || '';
+        const resumenConImagen = {
+            ...resumen, name: nombre,
+            image: resumen.image || catalogo.image || (entrada?.image || null)
+        };
+        const detalleGuardado = cacheDetallesEnergia.get(resumen.id);
+        if (detalleGuardado) {
+            if ((!seleccion.size || coincideEnergia(detalleGuardado, seleccion, modo))
+                && (!termino || coincideTextoCarta(detalleGuardado, termino))) {
+                aceptadas.set(resumen.id, {...resumenConImagen, ...detalleGuardado});
             }
             continue;
         }
-        if (Object.prototype.hasOwnProperty.call(indice.cards, resumen.id)
-            && Array.isArray(indice.cards[resumen.id])) {
-            if (!coincideEnergiaIndexada(indice.cards[resumen.id], seleccion, modo)) {
-                continue;
+        const energias = Array.isArray(entrada) ? entrada : entrada?.energies;
+        if (seleccion.size && Array.isArray(energias)
+            && !coincideEnergiaIndexada(energias, seleccion, modo)) continue;
+        const energiaVerificada = !seleccion.size || Array.isArray(energias);
+        const textoCompleto = entrada && !Array.isArray(entrada)
+            && typeof entrada.search === 'string';
+
+        if (!termino && energiaVerificada) {
+            aceptadas.set(resumen.id, resumenConImagen);
+        } else if (termino && textoCompleto && energiaVerificada) {
+            if (entrada.search.includes(termino)) {
+                aceptadas.set(resumen.id, resumenConImagen);
             }
-            if (!textoGeneral) {
-                aceptadas.set(resumen.id, resumen);
-                continue;
-            }
+        } else if (termino && energiaVerificada
+                   && normalizarTextoIndice(nombre).includes(termino)) {
+            // El nombre sí es conocido para todo el catálogo, incluso sin texto completo.
+            aceptadas.set(resumen.id, resumenConImagen);
+        } else {
+            pendientes.push(resumen);
         }
-        // No indexada, o necesita el detalle de ataques para buscar texto general.
-        pendientes.push(resumen);
     }
 
-    // La protección solo se aplica a las solicitudes que FALTAN del índice.
-    // No existe límite de 400 candidatos cuando ya están indexados.
-    // Evita disparar miles de consultas concurrentes durante la carga inicial.
-    const LIMITE_PENDIENTES_TEMPORAL = 1000;
-    if (pendientes.length > LIMITE_PENDIENTES_TEMPORAL) {
-        const disponibles = Number(indice.indexedCount) || 0;
-        const total = Number(indice.catalogSize) || 0;
-        throw new Error('El índice de energías aún se está construyendo (' + disponibles
-            + '/' + total + ' cartas). Esta búsqueda tiene ' + pendientes.length
-            + ' cartas sin datos suficientes; por ahora selecciona una expansión '
-            + 'o acota por nombre para evitar sobrecargar TCGdex. '
-            + 'El límite de 400 candidatas ya no se aplica a cartas indexadas.');
+    // Una búsqueda general puede incluir 15.000+ cartas. Nunca bloquearla con
+    // miles de peticiones ni presentar coincidencias parciales como exhaustivas.
+    const MAX_PENDIENTES_EN_LINEA = 180;
+    let incompleta = false;
+    if (pendientes.length > MAX_PENDIENTES_EN_LINEA) {
+        incompleta = true;
+    } else {
+        for (let i = 0; i < pendientes.length; i += CONCURRENCIA_ENERGIA) {
+            if (version !== versionBusqueda) return null;
+            const lote = pendientes.slice(i, i + CONCURRENCIA_ENERGIA);
+            const detalles = await Promise.all(lote.map(async resumen => {
+                const completo = await fetchAPI('cards/' + encodeURIComponent(resumen.id));
+                if (!completo || completo.id !== resumen.id) {
+                    throw new Error('No se pudo verificar la carta ' + resumen.id);
+                }
+                cacheDetallesEnergia.set(resumen.id, completo);
+                if (cacheDetallesEnergia.size > 800) {
+                    cacheDetallesEnergia.delete(cacheDetallesEnergia.keys().next().value);
+                }
+                return completo;
+            }));
+            for (const carta of detalles) {
+                if ((!seleccion.size || coincideEnergia(carta, seleccion, modo))
+                    && (!termino || coincideTextoCarta(carta, termino))) {
+                    const resumen = pendientes.find(c => c.id === carta.id);
+                    aceptadas.set(carta.id, {...resumen, ...carta});
+                }
+            }
+            if (version !== versionBusqueda) return null;
+            loadingCartas.textContent = 'Verificando ' + Math.min(i + lote.length, pendientes.length)
+                + ' / ' + pendientes.length + ' cartas pendientes del índice…';
+        }
     }
 
-    let completadas = 0;
-    for (let i = 0; i < pendientes.length; i += CONCURRENCIA_ENERGIA) {
-        if (version !== versionBusqueda) return null;
-        const lote = pendientes.slice(i, i + CONCURRENCIA_ENERGIA);
-        const detalles = await Promise.all(lote.map(async resumen => {
-            if (cacheDetallesEnergia.has(resumen.id)) return cacheDetallesEnergia.get(resumen.id);
-            const completo = await fetchAPI('cards/' + encodeURIComponent(resumen.id));
-            if (!completo || completo.id !== resumen.id) {
-                throw new Error('No se pudo verificar el coste de ' + resumen.id);
-            }
-            cacheDetallesEnergia.set(resumen.id, completo);
-            if (cacheDetallesEnergia.size > 800) {
-                cacheDetallesEnergia.delete(cacheDetallesEnergia.keys().next().value);
-            }
-            return completo;
-        }));
-        for (const carta of detalles) {
-            if (coincideEnergia(carta, seleccion, modo)
-                && (!textoGeneral || coincideTextoCarta(carta, textoGeneral))) {
-                aceptadas.set(carta.id, carta);
-            }
-        }
-        completadas += lote.length;
-        if (version !== versionBusqueda) return null;
-        if (pendientes.length > 0) {
-            loadingCartas.textContent = 'Verificando ' + completadas + ' / '
-                + pendientes.length + ' cartas que faltan en el índice…';
-        }
-    }
-    // Mantener el orden del listado original.
-    return resumenes.filter(r => aceptadas.has(r.id)).map(r => aceptadas.get(r.id));
+    return {
+        cartas: resumenes.filter(c => aceptadas.has(c.id)).map(c => aceptadas.get(c.id)),
+        parcial: incompleta,
+        pendientes: pendientes.length,
+        total: resumenes.length,
+        indiceTexto: Number(indice.searchIndexedCount) || 0,
+        catalogo: Number(indice.catalogSize) || 0
+    };
 }
 
 function configurarFiltroEnergiaAtaque() {
