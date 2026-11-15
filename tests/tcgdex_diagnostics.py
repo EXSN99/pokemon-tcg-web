@@ -3,9 +3,17 @@ import requests
 
 base="https://api.tcgdex.net/v2/es"
 checks=[
-    "cards?set.id=eq:swsh3",
-    "cards?set.id=eq:swsh3&attacks.cost=Water",
-    "cards?set.id=eq:swsh3&attacks.cost=Fire",
+    "cards?set.id=eq:swsh3&attacks.cost=Agua",
+    "cards?set.id=eq:swsh3&attacks.cost=Fuego",
+    "cards?set.id=eq:swsh3&attacks.cost=Incolora",
+    "cards?set.id=eq:swsh3&attacks.cost=Agua%7CFuego",
+    "cards?set.id=eq:swsh3&attacks.cost=Agua|Fuego",
+    "cards?set.id=eq:swsh3&attacks.cost=Planta",
+    "cards?set.id=eq:swsh3&attacks.cost=Metal",
+    "cards?set.id=eq:swsh3&attacks.cost=Rayo",
+    "cards?set.id=eq:swsh3&attacks.cost=Ps%C3%ADquico",
+    "cards?set.id=eq:swsh3&attacks.cost=Oscura",
+    "cards?set.id=eq:swsh3&attacks.cost=Lucha",
     "cards/swsh3-136",
 ]
 for path in checks:
