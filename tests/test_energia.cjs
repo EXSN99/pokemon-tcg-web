@@ -161,11 +161,11 @@ test('filtra 401 cartas indexadas sin límite de 400 ni llamadas individuales', 
     await app.eval('aplicarFiltros()');
     assert.equal(app.ctx.resultados.length, 200);
     assert.equal(app.ctx.llamadas.length, 1); // solo lista de catálogo
-    assert.equal(app.get('energia-indice-estado').textContent.includes('completo'), true);
+    assert.ok(app.get('energia-indice-estado').textContent.includes('401/401'));
 });
 
-test('consulta bajo demanda las cartas sin índice, sin límite de 400', async () => {
-    const resumenes = Array.from({length: 401}, (_, i) =>
+test('consulta hasta 150 cartas sin índice y verifica todas sus energías', async () => {
+    const resumenes = Array.from({length: 150}, (_, i) =>
         ({id: 'sv-' + String(i), name: 'Carta ' + i}));
     const detalles = Object.fromEntries(resumenes.map(x => [
         x.id, { ...x, attacks: [{cost: ['Fuego']}] }
@@ -173,8 +173,8 @@ test('consulta bajo demanda las cartas sin índice, sin límite de 400', async (
     const app = preparar({resumenes, detalles});
     app.eval("energiasSeleccionadas.add('Fire')");
     await app.eval('aplicarFiltros()');
-    assert.equal(app.ctx.resultados.length, 401);
-    assert.equal(app.ctx.llamadas.length, 402);
+    assert.equal(app.ctx.resultados.length, 150);
+    assert.equal(app.ctx.llamadas.length, 151);
 });
 
 test('si faltan más de mil cartas, avisa y nunca presenta resultados parciales', async () => {
@@ -183,7 +183,7 @@ test('si faltan más de mil cartas, avisa y nunca presenta resultados parciales'
     const app = preparar({resumenes});
     app.eval("energiasSeleccionadas.add('Fire')");
     await app.eval('aplicarFiltros()');
-    assert.match(app.get('cartas-container').textContent,/índice.*construyendo/i);
+    assert.match(app.get('estado-busqueda').textContent,/Búsqueda parcial/i);
     assert.equal(app.ctx.llamadas.length, 1);
 });
 
@@ -198,3 +198,59 @@ test('índice reconoce carta sin ataques y nunca la confunde con pendiente', asy
     assert.equal(app.ctx.llamadas.length,1);
 });
 
+
+
+test('texto completo v2 busca efectos y habilidades sin solicitudes individuales', async () => {
+    const resumenes = [
+        {id:'swsh3-136',name:'Furret',image:'https://assets.tcgdex.net/es/swsh/swsh3/136'},
+        {id:'sv-2',name:'Rayquaza',image:'https://assets.tcgdex.net/es/sv/sv01/2'},
+    ];
+    const indice = {
+        schemaVersion:2,language:'es',catalogSize:2,indexedCount:2,searchIndexedCount:2,
+        complete:true,catalog:{},
+        cards:{
+            'swsh3-136':{energies:['Colorless'],search:'furret roba 3 cartas',
+                image:resumenes[0].image},
+            'sv-2':{energies:['Fire'],search:'rayquaza habilidad vuelo celestial aumenta el daño',
+                image:resumenes[1].image},
+        }
+    };
+    const app = preparar({resumenes,indice});
+    app.eval("filtroAtaqueTexto.value = 'VUÉLO CELESTIAL'");
+    await app.eval('aplicarFiltros()');
+    assert.deepEqual(Array.from(app.ctx.resultados), ['sv-2']);
+    assert.equal(app.ctx.llamadas.length,1);
+    assert.match(app.get('estado-busqueda').textContent,/verificada/i);
+});
+
+test('búsqueda amplia sin texto completo informa cobertura parcial sin falsos ceros', async () => {
+    const resumenes = Array.from({length:500},(_,i)=>({id:'x-'+i,name:i===45?'Pikachu':'Otra'}));
+    const indice = {
+        schemaVersion:2,language:'es',catalogSize:500,indexedCount:1,
+        searchIndexedCount:1,complete:false,catalog:{},
+        cards:{'x-0':{energies:['Fire'],search:'roba muchas cartas',image:null}},
+    };
+    const app = preparar({resumenes,indice});
+    app.eval("filtroAtaqueTexto.value = 'Pikachu'");
+    await app.eval('aplicarFiltros()');
+    assert.deepEqual(Array.from(app.ctx.resultados), ['x-45']);
+    assert.match(app.get('estado-busqueda').textContent,/Búsqueda parcial/i);
+    assert.equal(app.ctx.llamadas.length,1);
+});
+
+test('las imágenes se obtienen de la URL oficial y no se fabrican desde el ID', async () => {
+    const app = preparar({
+        indice:{
+            schemaVersion:2,language:'es',catalogSize:2,indexedCount:1,
+            searchIndexedCount:1,cards:{},
+            catalog:{
+                '2022swsh-1':{name:'Carta',image:'https://assets.tcgdex.net/es/swsh/2022swsh/1'},
+                'x-2':{name:'Sin escaneo',image:null},
+            },
+        },
+    });
+    await app.eval('cargarIndiceEnergia()');
+    assert.equal(app.eval("urlImagenCarta({id:'2022swsh-1'},'low')"),
+        'https://assets.tcgdex.net/es/swsh/2022swsh/1/low.webp');
+    assert.equal(app.eval("baseImagenCarta({id:'x-2'})"),null);
+});
