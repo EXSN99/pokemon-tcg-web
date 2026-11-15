@@ -138,7 +138,7 @@ def create_pdf():
     try:
         pdf = generar_pdf(_imagenes_para_pdf(ids))
     except (requests.RequestException, ValueError, OSError) as exc:
-        app.logger.warning("PDF no generado: %s", exc)
+        app.logger.exception("PDF no generado: %s", exc)
         return jsonify(error=f"No se pudo obtener o procesar una carta: {exc}"), 422
     except Exception:
         app.logger.exception("Fallo al crear PDF")
