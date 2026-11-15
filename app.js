@@ -64,16 +64,15 @@ function obtenerTotalCopiasFavoritas() {
 function normalizarCartasGuardadas(datos) {
     if (!Array.isArray(datos)) return [];
     const normalizadas = [];
-    let total = 0;
     for (const carta of datos) {
         if (!carta || typeof carta.id !== 'string' || !/^[a-zA-Z0-9_.-]{3,72}$/.test(carta.id)) continue;
-        const cantidad = Math.min(cantidadDeCarta(carta), LIMITE_PDF - total);
-        if (cantidad <= 0) break;
+        const cantidad = cantidadDeCarta(carta);
         const existente = normalizadas.find(c => c.id === carta.id);
         if (existente) existente.cantidad += cantidad;
         else normalizadas.push({ ...carta, cantidad });
-        total += cantidad;
     }
+    // No recortar colecciones antiguas: el límite aplica al generar el PDF,
+    // no a la migración de favoritos existentes.
     return normalizadas;
 }
 
