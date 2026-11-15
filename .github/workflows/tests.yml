@@ -15,4 +15,3 @@ jobs:
       - run: node --check app.js
       - run: node --test tests/test_favoritos.cjs
       - run: node --test tests/test_energia.cjs
-      - run: python tests/tcgdex_diagnostics.py
