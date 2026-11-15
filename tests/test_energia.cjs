@@ -6,80 +6,145 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 
-function mockElement() {
+function elemento() {
+    const clases = new Set();
     return {
-        style: {}, value: '', textContent: '', innerHTML: '',
-        children: [], appendChild(child) { this.children.push(child); },
-        addEventListener() {}, setAttribute() {},
+        style: {}, dataset: {}, value: '', textContent: '', innerHTML: '',
+        children: [], listeners: {}, attributes: {},
+        classList: {
+            toggle(cls, enabled) { if (enabled) clases.add(cls); else clases.delete(cls); },
+            add(cls) { clases.add(cls); }, remove(cls) { clases.delete(cls); },
+            contains(cls) { return clases.has(cls); }
+        },
+        appendChild(hijo) { this.children.push(hijo); return hijo; },
+        append(...hijos) { this.children.push(...hijos); },
+        addEventListener(evt, cb) { (this.listeners[evt] ||= []).push(cb); },
+        setAttribute(k, v) { this.attributes[k] = v; },
     };
 }
 
-function preparar() {
+function preparar({resumenes = [], detalles = {}} = {}) {
     const elements = new Map();
     const get = id => {
-        if (!elements.has(id)) elements.set(id, mockElement());
+        if (!elements.has(id)) elements.set(id, elemento());
         return elements.get(id);
     };
-    const context = vm.createContext({
+    const ctx = vm.createContext({
         console,
         document: {
             getElementById: get,
-            createElement: mockElement,
-            querySelector: selector => get(selector),
+            createElement: elemento,
+            querySelector: get,
             querySelectorAll: () => [],
             addEventListener() {},
         },
-        window: { addEventListener() {} },
+        window: {addEventListener() {}},
     });
-    vm.runInContext(source, context);
+    ctx.resumenesFixture = resumenes;
+    ctx.detallesFixture = detalles;
+    vm.runInContext(source, ctx);
     vm.runInContext(
-        "fetchAPI = async endpoint => { (globalThis.requests ||= []).push(endpoint); return []; };"
-        + "actualizarExpansionesDisponibles = function() {};",
-        context
+        "globalThis.llamadas = [];"
+        + "fetchAPI = async endpoint => {"
+        + "globalThis.llamadas.push(endpoint);"
+        + "if(endpoint.startsWith('cards?')) return globalThis.resumenesFixture;"
+        + "return globalThis.detallesFixture[endpoint.slice(6)];"
+        + "};"
+        + "mostrarCartas = cards => {globalThis.resultados = cards.map(c => c.id);};"
+        + "actualizarExpansionesDisponibles = () => {};"
+        + "mostrarExpansiones = () => {};",
+        ctx
     );
-    return {context, get, eval: expression => vm.runInContext(expression, context)};
+    return {ctx, get, eval: code => vm.runInContext(code, ctx)};
 }
 
-test('el nuevo selector muestra energías de ataque y no reemplaza al tipo Pokémon', () => {
+const furret = {
+    id: 'swsh3-136', name: 'Furret', category: 'Pokémon',
+    types: ['Incolora'], attacks: [{cost: ['Incolora'], name: 'Buen Rollito'}]
+};
+const dragon = {
+    id: 'dragon-101', name: 'Dragón', category: 'Pokémon',
+    types: ['Dragón'], attacks: [{cost: ['Agua', 'Fuego', 'Incolora'], name: 'Llama Azul'}]
+};
+const rayquaza = {
+    id: 'dragon-102', name: 'Rayquaza', category: 'Pokémon',
+    types: ['Dragón'], attacks: [{cost: ['Rayo'], name: 'Chispa'}, {cost: ['Fuego'], name: 'Llamarada'}]
+};
+
+test('normaliza energías localizadas de la API en español', () => {
+    const app = preparar();
+    assert.equal(app.eval("normalizarEnergiaCosto('Agua')"), 'Water');
+    assert.equal(app.eval("normalizarEnergiaCosto('Incolora')"), 'Colorless');
+    assert.equal(app.eval("normalizarEnergiaCosto('Psíquica')"), 'Psychic');
+    assert.equal(app.eval("normalizarEnergiaCosto('Rayo')"), 'Lightning');
+    assert.equal(app.eval("normalizarEnergiaCosto('Metálica')"), 'Metal');
+});
+
+test('permite elegir más de una energía con chips y aria-pressed', async () => {
     const app = preparar();
     app.eval('configurarFiltroEnergiaAtaque()');
-    const selector = app.get('filtro-energia-ataque');
-    // La referencia al selector creado se inspecciona desde el contexto VM.
-    const values = Array.from(app.eval('filtroEnergiaAtaque.children.map(o => o.value)'));
-    assert.ok(values.includes('Water'));
-    assert.ok(values.includes('Fire'));
-    assert.ok(values.includes('Colorless'));
-    assert.ok(!values.includes('Dragon')); // Dragon es tipo Pokémon, no energía estándar.
-    assert.ok(app.get('.filtro-container').children.length >= 2);
+    const panel = app.get('.filtro-container').children[0];
+    const chips = panel.children.find(n => n.className === 'energia-chips');
+    assert.equal(chips.children.length, 10);
+    const agua = chips.children.find(c => c.dataset.energia === 'Water');
+    const fuego = chips.children.find(c => c.dataset.energia === 'Fire');
+    await agua.listeners.click[0]();
+    await fuego.listeners.click[0]();
+    assert.equal(app.eval('energiasSeleccionadas.size'), 2);
+    assert.equal(agua.attributes['aria-pressed'], 'true');
+    assert.equal(fuego.attributes['aria-pressed'], 'true');
+    assert.equal(agua.classList.contains('seleccionada'), true);
+    await agua.listeners.click[0]();
+    assert.equal(app.eval('energiasSeleccionadas.size'), 1);
 });
 
-test('aplica filtro attacks.cost independiente del tipo Dragon', async () => {
+test('Cualquiera (OR) y Todas (AND) comparan ataques, no tipos Pokémon', () => {
     const app = preparar();
-    app.eval("expansionSeleccionada = {id: 'sv01'}");
-    app.eval("tipoSeleccionado = 'Dragon'");
-    app.eval("categoriaSeleccionada = 'Pokemon'");
-    app.eval("energiaAtaqueSeleccionada = 'Water'");
-    await app.eval('aplicarFiltros()');
-    const url = app.eval('globalThis.requests[0]');
-    assert.ok(url.includes('types=Dragon'), url);
-    assert.ok(url.includes('attacks.cost=Water'), url);
-    assert.ok(url.includes('category=Pokemon'), url);
-    assert.ok(url.includes('set.id=eq:sv01'), url);
+    app.ctx.dragon = dragon;
+    app.ctx.rayquaza = rayquaza;
+    assert.equal(app.eval("coincideEnergia(dragon,new Set(['Water','Fire']),'todas')"), true);
+    assert.equal(app.eval("coincideEnergia(dragon,new Set(['Water','Metal']),'cualquiera')"), true);
+    assert.equal(app.eval("coincideEnergia(dragon,new Set(['Water','Metal']),'todas')"), false);
+    assert.equal(app.eval("coincideEnergia(rayquaza,new Set(['Lightning','Fire']),'todas')"), true);
+    assert.equal(app.eval("coincideEnergia(rayquaza,new Set(['Water']),'cualquiera')"), false);
+    assert.equal(app.eval("coincideEnergia(dragon,new Set(['Dragon']),'cualquiera')"), false);
 });
 
-test('respeta la energía tanto en búsqueda general como en su búsqueda alternativa', async () => {
-    const app = preparar();
-    app.eval("energiaAtaqueSeleccionada = 'Fire'");
-    app.eval("filtroAtaqueTexto.value = 'draco'");
+test('busca en detalles reales sin enviar attacks.cost al catálogo', async () => {
+    const resumenes = [furret, dragon, rayquaza].map(({id,name}) => ({id,name}));
+    const detalles = Object.fromEntries([furret, dragon, rayquaza].map(x => [x.id,x]));
+    const app = preparar({resumenes,detalles});
+    app.eval("expansionSeleccionada = {id:'swsh3'}");
+    app.eval("energiasSeleccionadas.add('Water')");
+    app.eval("energiasSeleccionadas.add('Fire')");
+    app.eval("criterioEnergias='todas'");
     await app.eval('aplicarFiltros()');
-    const queries = Array.from(app.eval('globalThis.requests'));
-    assert.equal(queries.length, 2);
-    assert.ok(queries.every(q => q.includes('attacks.cost=Fire')), queries.join('\n'));
+    assert.deepEqual(Array.from(app.ctx.resultados), ['dragon-101']);
+    assert.ok(app.ctx.llamadas[0].includes('set.id=eq:swsh3'));
+    assert.ok(app.ctx.llamadas.every(x => !x.includes('attacks.cost=')));
+    assert.equal(app.ctx.llamadas.length,4); // 1 lista + 3 detalles
+    app.ctx.llamadas = [];
+    app.eval("criterioEnergias='cualquiera'");
+    await app.eval('aplicarFiltros()');
+    assert.deepEqual(Array.from(app.ctx.resultados), ['dragon-101','dragon-102']);
+    assert.equal(app.ctx.llamadas.length,1); // detalles almacenados en caché
 });
 
-test('sin energía seleccionada no agrega restricciones de ataques', async () => {
-    const app = preparar();
+test('combina energía con texto general de los ataques', async () => {
+    const resumenes = [{id:dragon.id,name:dragon.name},{id:furret.id,name:furret.name}];
+    const detalles = {[dragon.id]:dragon,[furret.id]:furret};
+    const app = preparar({resumenes,detalles});
+    app.eval("energiasSeleccionadas.add('Fire')");
+    app.eval("filtroAtaqueTexto.value = 'Llama Azul'");
     await app.eval('aplicarFiltros()');
-    const url = app.eval('globalThis.requests[0]');
-    assert.ok(!url.includes('attacks.cost'), url);
+    assert.deepEqual(Array.from(app.ctx.resultados), ['dragon-101']);
+});
+
+test('no devuelve resultados parciales si la búsqueda sin expansión es demasiado amplia', async () => {
+    const resumenes = Array.from({length:401},(_,i)=>({id:'swsh3-'+i,name:'Carta'}));
+    const app = preparar({resumenes});
+    app.eval("energiasSeleccionadas.add('Fire')");
+    await app.eval('aplicarFiltros()');
+    assert.match(app.get('cartas-container').textContent,/Selecciona una expansión/i);
+    assert.equal(app.ctx.llamadas.length,1); // no descarga 401 detalles
 });
