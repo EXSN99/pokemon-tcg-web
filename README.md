@@ -70,7 +70,7 @@ Referencia: [TCGdex, estructura de las cartas](https://tcgdex.dev/es/reference/c
 
 - **Fuente:** `https://api.tcgdex.net/v2/es/cards` y el detalle de cada carta.
 - **Datos:** `data/energy-index.json`, con ID, energías, texto completo normalizado, URL de imagen oficial, catálogo breve y metadatos de cobertura.
-- **Carga:** `scripts/build_energy_index.py`, incremental e idempotente; procesa hasta 1.200 cartas pendientes en cada ejecución programada.
+- **Carga:** `scripts/build_energy_index.py`, incremental e idempotente; procesa hasta 3.000 cartas pendientes por ejecución programada, con tres consultas concurrentes y reintentos ante errores.
 - **Programación:** `.github/workflows/energy-index.yml`, automática una vez al día y con ejecución manual habilitada desde GitHub Actions.
 - **Actualización de la web:** el archivo se publica con el proyecto; tras el despliegue del commit, los usuarios consultan una versión ampliada de forma automática. La cobertura de texto se incrementa progresivamente.
 
