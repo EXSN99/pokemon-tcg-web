@@ -29,11 +29,13 @@ def test_validation():
     assert client.post("/api/pdf", json={"ids": ["swsh3-136"] * 55}).status_code == 400
 
 def test_pdf_endpoint_with_mocked_tcg_images():
-    with patch("server._get_image", return_value=Image.new("RGB", (600, 825), "red")):
-        response = app.test_client().post("/api/pdf", json={"ids": ["swsh3-136", "swsh3-136"]})
+    # 10 copias de una sola carta: una consulta de imagen y dos páginas A4.
+    with patch("server._get_image", return_value=Image.new("RGB", (600, 825), "red")) as get_image:
+        response = app.test_client().post("/api/pdf", json={"ids": ["swsh3-136"] * 10})
     assert response.status_code == 200
     assert response.mimetype == "application/pdf"
-    assert len(PdfReader(BytesIO(response.data)).pages) == 1
+    assert get_image.call_count == 1
+    assert len(PdfReader(BytesIO(response.data)).pages) == 2
 
 def test_original_card_dimensions_and_full_page_cut_lines():
     """Valida tamaño físico en PDF y ocho guías hasta el borde A4."""
