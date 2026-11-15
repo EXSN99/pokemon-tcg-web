@@ -1517,3 +1517,26 @@ button:focus-visible,a:focus-visible,.close:focus-visible {outline:3px solid #15
     .energia-combinacion { flex-direction: column; align-items: stretch; }
     .energia-combinacion select { max-width: 100%; width: 100%; }
 }
+
+
+/* Estado de la búsqueda de texto completo y cobertura del índice */
+.estado-busqueda {
+    margin: .6rem 0 1rem;
+    padding: .8rem 1rem;
+    border-radius: 9px;
+    background: #f2f6fb;
+    color: #23456c;
+    font-size: .9rem;
+    line-height: 1.45;
+}
+.estado-busqueda.advertencia {
+    background: #fff5db;
+    color: #734d0e;
+    border: 1px solid #f2d38b;
+}
+.energia-indice-estado {
+    margin: .4rem 0 0;
+    font-size: .83rem;
+    font-weight: 600;
+    color: #5c646e;
+}
