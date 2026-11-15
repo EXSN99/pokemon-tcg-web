@@ -421,6 +421,9 @@ document.addEventListener('DOMContentLoaded', () => {
     botonesContainer.appendChild(btnGuardadas);
     
     header.appendChild(botonesContainer);
+    // El contador se crea después de cargar localStorage; reflejar las copias ahora.
+    actualizarContadorCartas();
+    actualizarBotonesAgregar();
 });
 
 function inicializarApp() {
