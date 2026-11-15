@@ -157,9 +157,9 @@ def construir_indice(path: Path = DEST, batch_size: int = 1200, workers: int = 4
     # lo demás se llena progresivamente en las siguientes ejecuciones.
     pendientes = [
         cid for cid in dict.fromkeys(["swsh3-136"] + ids)
-        if cid not in cards or not (
+        if cid in ids_validos and (cid not in cards or not (
             isinstance(cards[cid], dict) and isinstance(cards[cid].get("search"), str)
-        )
+        ))
     ][:batch_size]
     logging.info("Catálogo: %d | indexadas: %d | nuevas: %d", len(ids), len(cards), len(pendientes))
 
