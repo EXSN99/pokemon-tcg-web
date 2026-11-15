@@ -17,7 +17,12 @@ let cartasActuales = [];
 let cartasFiltradas = [];
 let expansionSeleccionada = null;
 let tipoSeleccionado = 'todos';
-let energiaAtaqueSeleccionada = 'todas';
+const energiasSeleccionadas = new Set();
+let criterioEnergias = 'cualquiera';
+let versionBusqueda = 0;
+const cacheDetallesEnergia = new Map();
+const LIMITE_CANDIDATOS_ENERGIA = 400;
+const CONCURRENCIA_ENERGIA = 6;
 let categoriaSeleccionada = 'todas';
 let nombreBuscado = '';
 let paginaActual = 1;
@@ -43,7 +48,6 @@ const detalleCartaDiv = document.getElementById('detalle-carta');
 const closeModal = document.querySelector('.close');
 const filtroTipo = document.getElementById('filtro-tipo');
 const filtroCategoria = document.createElement('select');
-const filtroEnergiaAtaque = document.createElement('select');
 const filtroNombre = document.createElement('input');
 const filtroAtaqueTexto = document.createElement('input');
 const buscadorExpansiones = document.getElementById('buscador-expansiones');
@@ -545,43 +549,149 @@ function configurarFiltroTipo() {
     filtroContainer.appendChild(filtroTipo);
 }
 
-// Filtra por energía presente en attacks[].cost, no por el tipo del Pokémon.
-// Ejemplo: un Dragón de tipo Dragon con ataque Fire + Water aparece en ambos filtros.
-function configurarFiltroEnergiaAtaque() {
-    const contenedor = document.querySelector('.filtro-container');
-    const etiqueta = document.createElement('label');
-    etiqueta.className = 'filtro-label';
-    etiqueta.htmlFor = 'filtro-energia-ataque';
-    etiqueta.textContent = 'Energía en ataques:';
+// El endpoint /cards devuelve resúmenes sin ataques. La API devuelve []
+// al usar attacks.cost=Incolora pese a existir cartas cuyo detalle tiene ese coste.
+// Se descargan los detalles reales para evitar falsos negativos.
+const OPCIONES_ENERGIA = [
+    ['Grass','🌿 Planta'],['Fire','🔥 Fuego'],['Water','💧 Agua'],
+    ['Lightning','⚡ Rayo'],['Psychic','🔮 Psíquica'],['Fighting','🥊 Lucha'],
+    ['Darkness','🌑 Oscura'],['Metal','⚙️ Metálica'],['Fairy','🧚 Hada'],
+    ['Colorless','⚪ Incolora']
+];
 
-    filtroEnergiaAtaque.id = 'filtro-energia-ataque';
-    filtroEnergiaAtaque.className = 'filtro-select';
-    filtroEnergiaAtaque.title = 'Busca energía requerida en el coste de al menos un ataque, independientemente del tipo del Pokémon. La energía Incolora es un coste genérico.';
-    const tipos = [
-        ['todas', 'Todas las energías'],
-        ['Grass', '🌿 Planta'],
-        ['Fire', '🔥 Fuego'],
-        ['Water', '💧 Agua'],
-        ['Lightning', '⚡ Rayo'],
-        ['Psychic', '🔮 Psíquica'],
-        ['Fighting', '🥊 Lucha'],
-        ['Darkness', '🌑 Oscura'],
-        ['Metal', '⚙️ Metálica'],
-        ['Fairy', '🧚 Hada (histórica)'],
-        ['Colorless', '⚪ Incolora (genérica)']
-    ];
-    for (const [valor, texto] of tipos) {
-        const opcion = document.createElement('option');
-        opcion.value = valor;
-        opcion.textContent = texto;
-        filtroEnergiaAtaque.appendChild(opcion);
+function normalizarEnergiaCosto(energia) {
+    const clave = String(energia || '').normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const nombres = {
+        grass:'Grass', planta:'Grass', fire:'Fire', fuego:'Fire',
+        water:'Water', agua:'Water', lightning:'Lightning', rayo:'Lightning',
+        electrica:'Lightning', electrico:'Lightning',
+        psychic:'Psychic', psiquico:'Psychic', psiquica:'Psychic',
+        fighting:'Fighting', lucha:'Fighting',
+        darkness:'Darkness', oscura:'Darkness', oscuro:'Darkness',
+        metal:'Metal', metalica:'Metal', metalico:'Metal',
+        fairy:'Fairy', hada:'Fairy', colorless:'Colorless',
+        incolora:'Colorless', incoloro:'Colorless'
+    };
+    return nombres[clave] || null;
+}
+
+function energiaDeAtaques(carta) {
+    const energias = new Set();
+    for (const ataque of (Array.isArray(carta?.attacks) ? carta.attacks : [])) {
+        for (const costo of (Array.isArray(ataque?.cost) ? ataque.cost : [])) {
+            const tipo = normalizarEnergiaCosto(costo);
+            if (tipo) energias.add(tipo);
+        }
     }
-    filtroEnergiaAtaque.addEventListener('change', async () => {
-        energiaAtaqueSeleccionada = filtroEnergiaAtaque.value;
+    return energias;
+}
+
+function coincideEnergia(carta, seleccionadas = energiasSeleccionadas, modo = criterioEnergias) {
+    if (seleccionadas.size === 0) return true;
+    const disponibles = energiaDeAtaques(carta);
+    return modo === 'todas'
+        ? [...seleccionadas].every(tipo => disponibles.has(tipo))
+        : [...seleccionadas].some(tipo => disponibles.has(tipo));
+}
+
+function coincideTextoCarta(carta, texto) {
+    const campos = [
+        carta.name, carta.description, carta.rarity, carta.category,
+        carta.set?.name, ...(Array.isArray(carta.types) ? carta.types : []),
+        ...(Array.isArray(carta.attacks) ? carta.attacks.flatMap(a =>
+            [a.name,a.effect,a.description]) : []),
+        ...(Array.isArray(carta.abilities) ? carta.abilities.flatMap(a =>
+            [a.name,a.effect]) : [])
+    ];
+    return campos.some(valor => String(valor || '').toLocaleLowerCase('es')
+        .includes(texto.toLocaleLowerCase('es')));
+}
+
+async function resolverDetallesEnergia(resumenes, version) {
+    const detalles = [];
+    for (let i = 0; i < resumenes.length; i += CONCURRENCIA_ENERGIA) {
+        if (version !== versionBusqueda) return null;
+        const lote = resumenes.slice(i,i + CONCURRENCIA_ENERGIA);
+        const datos = await Promise.all(lote.map(async resumen => {
+            if (cacheDetallesEnergia.has(resumen.id)) return cacheDetallesEnergia.get(resumen.id);
+            const completo = await fetchAPI('cards/' + encodeURIComponent(resumen.id));
+            if (!completo || completo.id !== resumen.id) {
+                throw new Error('No se pudo verificar la carta ' + resumen.id);
+            }
+            cacheDetallesEnergia.set(resumen.id, completo);
+            if (cacheDetallesEnergia.size > 800) {
+                cacheDetallesEnergia.delete(cacheDetallesEnergia.keys().next().value);
+            }
+            return completo;
+        }));
+        detalles.push(...datos);
+        if (version !== versionBusqueda) return null;
+        loadingCartas.textContent = 'Analizando costes: ' + detalles.length + '/' + resumenes.length;
+    }
+    return detalles;
+}
+
+function configurarFiltroEnergiaAtaque() {
+    const panel = document.createElement('fieldset');
+    panel.className = 'energia-filtro';
+    panel.id = 'filtro-energia-ataque';
+    const legend = document.createElement('legend');
+    legend.textContent = 'Energía requerida en ataques (elige varias)';
+    panel.appendChild(legend);
+
+    const opciones = document.createElement('div');
+    opciones.className = 'energia-chips';
+    for (const [tipo, nombre] of OPCIONES_ENERGIA) {
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.textContent = nombre;
+        boton.className = 'energia-chip';
+        boton.dataset.energia = tipo;
+        boton.setAttribute('aria-pressed', 'false');
+        boton.addEventListener('click', async () => {
+            if (energiasSeleccionadas.has(tipo)) energiasSeleccionadas.delete(tipo);
+            else energiasSeleccionadas.add(tipo);
+            boton.classList.toggle('seleccionada', energiasSeleccionadas.has(tipo));
+            boton.setAttribute('aria-pressed', String(energiasSeleccionadas.has(tipo)));
+            await aplicarFiltros();
+        });
+        opciones.appendChild(boton);
+    }
+    panel.appendChild(opciones);
+
+    const fila = document.createElement('div');
+    fila.className = 'energia-combinacion';
+    const label = document.createElement('label');
+    label.htmlFor = 'energia-coincidencia';
+    label.textContent = 'Combinar energías:';
+    const select = document.createElement('select');
+    select.id = 'energia-coincidencia';
+    select.className = 'filtro-select';
+    for (const [valor, descripcion] of [
+        ['cualquiera','Cualquiera (Agua o Fuego)'],
+        ['todas','Todas (Agua y Fuego)']
+    ]) {
+        const option = document.createElement('option');
+        option.value = valor;
+        option.textContent = descripcion;
+        select.appendChild(option);
+    }
+    select.value = criterioEnergias;
+    select.addEventListener('change', async () => {
+        criterioEnergias = select.value;
         await aplicarFiltros();
     });
-    contenedor.appendChild(etiqueta);
-    contenedor.appendChild(filtroEnergiaAtaque);
+    fila.append(label,select);
+    panel.appendChild(fila);
+
+    const aviso = document.createElement('p');
+    aviso.className = 'energia-ayuda';
+    aviso.textContent = 'Se revisan las energías de los ataques, no el tipo del Pokémon. '
+      + '«Todas» exige esas energías en uno o varios ataques. '
+      + 'Para búsquedas amplias puede ser necesario seleccionar una expansión.';
+    panel.appendChild(aviso);
+    document.querySelector('.filtro-container').appendChild(panel);
 }
 
 // Configurar el filtro de texto de ataque
