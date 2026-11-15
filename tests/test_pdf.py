@@ -30,7 +30,7 @@ def test_validation():
 
 def test_pdf_endpoint_with_mocked_tcg_images():
     # 10 copias de una sola carta: una consulta de imagen y dos páginas A4.
-    with patch("server._get_image", return_value=Image.new("RGB", (600, 825), "red")) as get_image:
+    with patch("server._get_image", side_effect=lambda _id: Image.new("RGB", (600, 825), "red")) as get_image:
         response = app.test_client().post("/api/pdf", json={"ids": ["swsh3-136"] * 10})
     assert response.status_code == 200
     assert response.mimetype == "application/pdf"
