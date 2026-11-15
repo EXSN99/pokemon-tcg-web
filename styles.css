@@ -1442,3 +1442,78 @@ button:focus-visible,a:focus-visible,.close:focus-visible {outline:3px solid #15
         font-size: .8rem;
     }
 }
+
+
+/* Selector múltiple: energía requerida en ataques (independiente del tipo). */
+.filtro-container > .energia-filtro {
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+    padding: .85rem;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    background: #fafafa;
+}
+.energia-filtro legend {
+    padding: 0 .3rem;
+    font-weight: 700;
+    color: #444;
+    font-size: .95rem;
+}
+.energia-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin: .25rem 0 .85rem;
+}
+.energia-chip {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid #d5d5d5;
+    background: #fff;
+    color: #424242;
+    padding: .5rem .8rem;
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color .15s, border-color .15s;
+}
+.energia-chip:hover { background: #ffebee; border-color: #ef9a9a; }
+.energia-chip.seleccionada,
+.energia-chip[aria-pressed="true"] {
+    background: #b71c1c;
+    color: #fff;
+    border-color: #b71c1c;
+}
+.energia-chip.seleccionada:hover { background: #8e1616; }
+.energia-chip:focus-visible {
+    outline: 3px solid #1565c0;
+    outline-offset: 2px;
+}
+.energia-combinacion {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .6rem;
+}
+.energia-combinacion label { color: #555; font-weight: 600; }
+.energia-combinacion select {
+    max-width: 310px;
+    min-width: 170px;
+    flex: 1;
+}
+.energia-ayuda {
+    margin-top: .65rem;
+    color: #616161;
+    line-height: 1.45;
+    font-size: .8rem;
+}
+@media (max-width: 600px) {
+    .filtro-container > .energia-filtro { padding: .65rem; }
+    .energia-chip { font-size: .82rem; min-height: 42px; }
+    .energia-combinacion { flex-direction: column; align-items: stretch; }
+    .energia-combinacion select { max-width: 100%; width: 100%; }
+}
