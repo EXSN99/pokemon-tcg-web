@@ -13,7 +13,7 @@
 | Función | Descripción |
 | --- | --- |
 | 🃏 **Explorar cartas** | Visualiza cartas Pokémon TCG en español organizadas por expansiones, con imágenes y vista ampliada. |
-| 🔍 **Buscar y filtrar** | Filtra por expansión, nombre, categoría, tipo de Pokémon y **energía requerida en sus ataques**. También puedes buscar texto y Pokémon con habilidad. |
+| 🔍 **Buscar y filtrar** | Filtra por expansión, nombre, tipo, energías de los ataques y **Búsqueda General** sobre nombres, ataques, efectos y habilidades según la cobertura del índice. |
 | ❤️ **Guardar favoritas y copias** | Añade la misma carta varias veces. Ajusta sus copias con los botones **− / +** antes de exportar. |
 | 📄 **Descargar PDF** | Genera un documento A4 con hasta **9 cartas por hoja** y **180 copias por PDF (20 páginas A4)**, incluidas las cartas repetidas. |
 | ✂️ **Usar guías de corte** | El PDF incluye líneas extendidas hasta los bordes de la página para facilitar el recorte. |
@@ -24,7 +24,7 @@
 
 1. **Entra a la web:** [pokemon-tcg-cartas-0nch.onrender.com](https://pokemon-tcg-cartas-0nch.onrender.com/).
 2. **Explora las expansiones:** selecciona una de la lista o utiliza el buscador de expansiones.
-3. **Encuentra tus cartas:** utiliza nombre, categoría, tipo de Pokémon, habilidad o **Búsqueda General**. En **Energía requerida en ataques**, pulsa uno o varios botones (por ejemplo, Agua y Fuego) y elige **Cualquiera** o **Todas**. Para filtrar una expansión grande, selecciónala primero. En Búsqueda General, pulsa **Buscar** o **Enter**.
+3. **Encuentra tus cartas:** busca por nombre, categoría, tipo o energía de los ataques. En **Búsqueda General**, introduce una palabra o frase de ataques, efectos o habilidades y pulsa **Buscar** o **Enter**. Si el índice aún no cubre todo el catálogo, aparecerá un aviso de resultados parciales. El filtro **Solo cartas con imagen disponible** viene marcado para facilitar la impresión; desmárcalo para consultar también cartas sin escaneo.
 4. **Abre una carta:** selecciónala para ver su imagen ampliada y navegar entre cartas.
 5. **Añádela a favoritos:** pulsa el corazón 🤍. Cada pulsación suma **una copia** de esa carta y el contador ❤️ muestra el total de copias.
 6. **Elige cuántas copias imprimir:** abre ❤️ **Favoritos** y usa **+** para añadir otra copia o **−** para quitar una. La **✕** elimina todas las copias de esa carta. El contador te indica el total seleccionado.
@@ -58,9 +58,9 @@ Este filtro **no es el tipo del Pokémon**. Por ejemplo, un Pokémon de tipo Dra
 
 **Ejemplo:** un Dragón con un ataque que utiliza Agua y Fuego aparecerá con las dos energías seleccionadas y el modo **Todas**.
 
-**Índice de energías:** GitHub Actions construye diariamente un archivo JSON con las energías exigidas por los ataques (`attacks[].cost`) de las cartas en español. La web carga ese índice y filtra sus entradas **sin realizar una solicitud por carta**, incluso si hay más de 400 cartas candidatas. Se conservan también las cartas que no tienen coste de ataque (lista vacía), y las peticiones fallidas se reintentan más adelante.
+**Índice unificado de búsqueda:** GitHub Actions genera y actualiza `data/energy-index.json`. En el esquema v2 guarda las **energías de ataque, texto normalizado de nombres, ataques, efectos y habilidades, imágenes oficiales de TCGdex y un catálogo breve**. Este último incluye los nombres e imágenes disponibles de todo el catálogo. La web puede filtrar registros indexados sin realizar peticiones individuales a TCGdex. Se conservan también las cartas que no tienen costes de ataque (lista vacía).
 
-**Mientras se completa la primera indexación**, las cartas todavía no incorporadas al índice se consultan directamente a TCGdex cuando son necesarias. Para no generar miles de solicitudes simultáneas, una búsqueda con más de **1.000 cartas pendientes** mostrará un aviso y solicitará acotar la selección. Este es un límite **temporal de datos faltantes**, no un límite sobre las cartas ya indexadas; desaparecerá en las búsquedas cubiertas completamente por el índice. El panel de energías muestra la cobertura actual del índice.
+**Mientras se completa el índice de texto completo**, las búsquedas por nombre trabajan con el catálogo disponible, y las búsquedas sobre ataques, efectos y habilidades verifican los registros ya indexados. Si quedan demasiadas cartas sin texto completo, la web indica explícitamente **«Búsqueda parcial»**, muestra únicamente coincidencias verificadas y explica que puede haber más; así evita confundir ausencia de resultados con ausencia de datos. Para búsquedas acotadas también verifica directamente detalles pendientes mediante consultas limitadas. El panel de energías muestra la cobertura de energías y de texto.
 
 **Incolora** es un símbolo de coste genérico, no necesariamente una carta de Energía Incolora.
 
@@ -69,10 +69,10 @@ Referencia: [TCGdex, estructura de las cartas](https://tcgdex.dev/es/reference/c
 ### Cómo se mantiene el índice
 
 - **Fuente:** `https://api.tcgdex.net/v2/es/cards` y el detalle de cada carta.
-- **Datos:** `data/energy-index.json`, con ID, energías del coste de ataques y metadatos de cobertura.
+- **Datos:** `data/energy-index.json`, con ID, energías, texto completo normalizado, URL de imagen oficial, catálogo breve y metadatos de cobertura.
 - **Carga:** `scripts/build_energy_index.py`, incremental e idempotente; procesa hasta 1.200 cartas pendientes en cada ejecución programada.
 - **Programación:** `.github/workflows/energy-index.yml`, automática una vez al día y con ejecución manual habilitada desde GitHub Actions.
-- **Actualización de la web:** el archivo se publica con el proyecto; al desplegar el nuevo commit, los usuarios consultan la versión ampliada.
+- **Actualización de la web:** el archivo se publica con el proyecto; tras el despliegue del commit, los usuarios consultan una versión ampliada de forma automática. La cobertura de texto se incrementa progresivamente.
 
 Puedes seguir las ejecuciones en [GitHub Actions — Actualizar índice de energías](https://github.com/EXSN99/pokemon-tcg-web/actions/workflows/energy-index.yml). La cobertura y la fecha de generación aparecen en el propio JSON. No se almacenan imágenes ni datos personales, solo un índice derivado de los costes de ataques publicados por TCGdex.
 
@@ -88,6 +88,10 @@ El PDF mantiene **63 × 88 mm por carta**, las nueve cartas por hoja A4 y las l�
 3. Al abrir el enlace, la otra persona podrá importar las cartas y sus copias a sus propios favoritos (hasta el límite disponible de 180 copias).
 
 **Importante:** compartir la selección **no** crea una cuenta ni sincroniza automáticamente los cambios posteriores entre dispositivos.
+
+## Imágenes de cartas
+
+La página utiliza el campo oficial `image` de TCGdex y, cuando es necesario, prueba variantes de calidad o formato. Si TCGdex no publica una imagen para una carta, esta no puede generarse a partir de su identificador. Para facilitar la selección de cartas imprimibles, la opción **Mostrar solo cartas con imagen disponible** está activada por defecto; desactívala para ver también fichas sin imagen.
 
 ## Historial y almacenamiento
 
@@ -112,7 +116,7 @@ Sí. Puedes guardar varias copias de una misma carta o combinar cartas distintas
 Verifica que el visor o la impresora esté configurado en **100 % / Tamaño real**, sin escalado ni ajuste automático.
 
 **¿Puedo utilizar la búsqueda para encontrar texto de ataques o habilidades?**  
-La **Búsqueda General** revisa campos de detalle, incluidos ataques y habilidades, de las cartas consultadas. **No es una búsqueda exhaustiva de todo el catálogo**; conviene acotarla por expansión, tipo o nombre cuando sea posible.
+La **Búsqueda General** revisa el texto indexado de nombres, ataques, efectos y habilidades, y completa búsquedas pequeñas con detalles de TCGdex. **Mientras la indexación no alcance el 100 %, los resultados sobre ataques y habilidades pueden ser parciales**; la página lo indica para que no se interpreten como exhaustivos.
 
 **¿Mis favoritos se comparten automáticamente con otros dispositivos?**  
 No. Cada navegador guarda sus favoritos localmente. Puedes transferirlos mediante **Compartir favoritos**.
