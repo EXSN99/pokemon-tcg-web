@@ -17,6 +17,7 @@ let cartasActuales = [];
 let cartasFiltradas = [];
 let expansionSeleccionada = null;
 let tipoSeleccionado = 'todos';
+let energiaAtaqueSeleccionada = 'todas';
 let categoriaSeleccionada = 'todas';
 let nombreBuscado = '';
 let paginaActual = 1;
@@ -24,7 +25,9 @@ const cartasPorPagina = 48;
 
 // Configuración del servidor local
 const SERVER_URL = ''; // backend y frontend en el mismo dominio
-const LIMITE_PDF = 54;
+const PAGINAS_MAXIMAS_PDF = 20;
+const CARTAS_POR_HOJA_A4 = 9;
+const LIMITE_PDF = PAGINAS_MAXIMAS_PDF * CARTAS_POR_HOJA_A4; // 180 copias
 
 // Elementos del DOM
 const listaExpansiones = document.getElementById('lista-expansiones');
@@ -40,6 +43,7 @@ const detalleCartaDiv = document.getElementById('detalle-carta');
 const closeModal = document.querySelector('.close');
 const filtroTipo = document.getElementById('filtro-tipo');
 const filtroCategoria = document.createElement('select');
+const filtroEnergiaAtaque = document.createElement('select');
 const filtroNombre = document.createElement('input');
 const filtroAtaqueTexto = document.createElement('input');
 const buscadorExpansiones = document.getElementById('buscador-expansiones');
@@ -224,6 +228,7 @@ function mostrarCartasGuardadas() {
     const titulo = document.createElement('h2');
     titulo.textContent = 'Favoritos';
     titulo.className = 'titulo-favoritos';
+    titulo.title = `Máximo ${PAGINAS_MAXIMAS_PDF} páginas A4 (${LIMITE_PDF} copias)`;
     titulo.style.marginBottom = '20px';
     
     // Crear contenedor para los botones
@@ -431,6 +436,7 @@ function inicializarApp() {
     configurarFiltroNombre();
     configurarFiltroCategoria();
     configurarFiltroTipo();
+    configurarFiltroEnergiaAtaque();
     configurarFiltroAtaque();
     configurarFiltroHabilidad();
     configurarBuscadorExpansiones();
@@ -537,6 +543,45 @@ function configurarFiltroTipo() {
     
     filtroContainer.appendChild(labelTipo);
     filtroContainer.appendChild(filtroTipo);
+}
+
+// Filtra por energía presente en attacks[].cost, no por el tipo del Pokémon.
+// Ejemplo: un Dragón de tipo Dragon con ataque Fire + Water aparece en ambos filtros.
+function configurarFiltroEnergiaAtaque() {
+    const contenedor = document.querySelector('.filtro-container');
+    const etiqueta = document.createElement('label');
+    etiqueta.className = 'filtro-label';
+    etiqueta.htmlFor = 'filtro-energia-ataque';
+    etiqueta.textContent = 'Energía en ataques:';
+
+    filtroEnergiaAtaque.id = 'filtro-energia-ataque';
+    filtroEnergiaAtaque.className = 'filtro-select';
+    filtroEnergiaAtaque.title = 'Busca energía requerida en el coste de al menos un ataque, independientemente del tipo del Pokémon. La energía Incolora es un coste genérico.';
+    const tipos = [
+        ['todas', 'Todas las energías'],
+        ['Grass', '🌿 Planta'],
+        ['Fire', '🔥 Fuego'],
+        ['Water', '💧 Agua'],
+        ['Lightning', '⚡ Rayo'],
+        ['Psychic', '🔮 Psíquica'],
+        ['Fighting', '🥊 Lucha'],
+        ['Darkness', '🌑 Oscura'],
+        ['Metal', '⚙️ Metálica'],
+        ['Fairy', '🧚 Hada (histórica)'],
+        ['Colorless', '⚪ Incolora (genérica)']
+    ];
+    for (const [valor, texto] of tipos) {
+        const opcion = document.createElement('option');
+        opcion.value = valor;
+        opcion.textContent = texto;
+        filtroEnergiaAtaque.appendChild(opcion);
+    }
+    filtroEnergiaAtaque.addEventListener('change', async () => {
+        energiaAtaqueSeleccionada = filtroEnergiaAtaque.value;
+        await aplicarFiltros();
+    });
+    contenedor.appendChild(etiqueta);
+    contenedor.appendChild(filtroEnergiaAtaque);
 }
 
 // Configurar el filtro de texto de ataque
@@ -646,6 +691,9 @@ async function aplicarFiltros() {
         if (expansionSeleccionada) filtros.push(`set.id=eq:${expansionSeleccionada.id}`);
         if (tipoSeleccionado !== 'todos') filtros.push(`types=${tipoSeleccionado}`);
         if (categoriaSeleccionada !== 'todas') filtros.push(`category=${categoriaSeleccionada}`);
+        if (energiaAtaqueSeleccionada !== 'todas') {
+            filtros.push(`attacks.cost=${encodeURIComponent(energiaAtaqueSeleccionada)}`);
+        }
         
         // Filtro de nombre usando el parámetro name de la API
         nombreBuscado = filtroNombre.value.trim();
@@ -695,6 +743,9 @@ async function aplicarFiltros() {
                 if (expansionSeleccionada) filtrosAmplios.push(`set.id=eq:${expansionSeleccionada.id}`);
                 if (tipoSeleccionado !== 'todos') filtrosAmplios.push(`types=${tipoSeleccionado}`);
                 if (categoriaSeleccionada !== 'todas') filtrosAmplios.push(`category=${categoriaSeleccionada}`);
+                if (energiaAtaqueSeleccionada !== 'todas') {
+                    filtrosAmplios.push(`attacks.cost=${encodeURIComponent(energiaAtaqueSeleccionada)}`);
+                }
                 if (checkboxHabilidad && checkboxHabilidad.checked) {
                     filtrosAmplios.push('abilities=notnull:');
                 }
