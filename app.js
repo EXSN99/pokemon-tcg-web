@@ -603,8 +603,8 @@ function coincideTextoCarta(carta, texto) {
         ...(Array.isArray(carta.abilities) ? carta.abilities.flatMap(a =>
             [a.name,a.effect]) : [])
     ];
-    return campos.some(valor => String(valor || '').toLocaleLowerCase('es')
-        .includes(texto.toLocaleLowerCase('es')));
+    return campos.some(valor => normalizarTextoIndice(valor)
+        .includes(normalizarTextoIndice(texto)));
 }
 
 // Índice generado por GitHub Actions. Se carga una vez por sesión para evitar
@@ -952,167 +952,81 @@ async function aplicarFiltros() {
     const modoEnergias = criterioEnergias;
     paginaActual = 1;
     loadingCartas.style.display = 'block';
-    loadingCartas.textContent = 'Cargando cartas…';
+    loadingCartas.textContent = 'Buscando cartas…';
     cartasContainer.innerHTML = '';
+    mostrarEstadoBusqueda('');
+
     try {
-        let endpoint = 'cards?';
-        let filtros = [];
-        
-        // Filtros básicos de la API
-        if (expansionSeleccionada) filtros.push(`set.id=eq:${expansionSeleccionada.id}`);
-        if (tipoSeleccionado !== 'todos') filtros.push(`types=${tipoSeleccionado}`);
-        if (categoriaSeleccionada !== 'todas') filtros.push(`category=${categoriaSeleccionada}`);
-        
-        // Filtro de nombre usando el parámetro name de la API
-        nombreBuscado = filtroNombre.value.trim();
-        // Al usar Búsqueda General, no añadir filtro por nombre a la API.
-        
-        // Filtro de habilidad usando el parámetro abilities de la API
+        const filtros = [];
+        if (expansionSeleccionada) filtros.push('set.id=eq:' + encodeURIComponent(expansionSeleccionada.id));
+        if (tipoSeleccionado !== 'todos') filtros.push('types=' + encodeURIComponent(tipoSeleccionado));
+        if (categoriaSeleccionada !== 'todas') filtros.push('category=' + encodeURIComponent(categoriaSeleccionada));
+        const nombre = filtroNombre.value.trim();
+        nombreBuscado = nombre;
+        if (nombre) filtros.push('name=like:' + encodeURIComponent(nombre));
+
         const checkboxHabilidad = document.getElementById('filtro-habilidad');
-        if (checkboxHabilidad && checkboxHabilidad.checked) {
-            filtros.push('abilities=notnull:');
-        }
-        
-        // Filtro de texto general (busca en toda la carta)
+        if (checkboxHabilidad?.checked) filtros.push('abilities=notnull:');
         const textoGeneral = filtroAtaqueTexto.value.trim();
-        
-        // Si hay texto general, no usar filtros de API para nombre (lo haremos manualmente)
-        if (textoGeneral) {
-            // No agregar filtro de nombre aquí, lo haremos en la búsqueda manual
-        } else {
-            // Solo usar filtro de nombre de la API si no hay texto general
-            if (nombreBuscado) filtros.push(`name=like:${nombreBuscado}`);
-        }
-        
-        endpoint += filtros.join('&');
-        let cartasFiltro = await fetchAPI(endpoint);
+
+        // El catálogo resumido contiene nombre e imagen, no los textos de ataques.
+        // Los efectos, ataques y habilidades se buscan en el índice textual v2.
+        const respuesta = await fetchAPI('cards?' + filtros.join('&'));
         if (version !== versionBusqueda) return;
-        if (seleccion.size) {
-            if (!Array.isArray(cartasFiltro)) throw new Error('Respuesta de catálogo inválida');
-            // El índice permite filtrar miles de cartas sin nuevas llamadas a la API.
-            // Solo las no indexadas se revisan individualmente.
-            const detalles = await resolverDetallesEnergia(
-                cartasFiltro, version, seleccion, modoEnergias, textoGeneral);
-            if (!detalles || version !== versionBusqueda) return;
-            cartasFiltro = detalles;
-        }
+        if (!Array.isArray(respuesta)) throw new Error('Catálogo de cartas inválido');
 
-        // Si hay texto general sin energía, conservar la búsqueda completa original
-
-        if (textoGeneral && !seleccion.size) {
-            // Obtener detalles completos de las cartas para buscar en todos los campos
-            let cartasConDetalles = [];
-            
-            if (cartasFiltro && cartasFiltro.length > 0) {
-                // Obtener detalles completos de las cartas encontradas
-                cartasConDetalles = await Promise.all(
-                    cartasFiltro.map(async carta => {
-                        try {
-                            return await fetchAPI(`cards/${carta.id}`);
-                        } catch (error) {
-                            console.warn(`Error al obtener detalles de la carta ${carta.id}:`, error);
-                            return carta; // Usar datos básicos si falla
-                        }
-                    })
+        let cartas = respuesta;
+        if (seleccion.size || textoGeneral) {
+            const verificacion = await resolverDetallesEnergia(
+                respuesta, version, seleccion, modoEnergias, textoGeneral);
+            if (!verificacion || version !== versionBusqueda) return;
+            cartas = verificacion.cartas;
+            if (verificacion.parcial) {
+                const cobertura = verificacion.catalogo
+                    ? verificacion.indiceTexto.toLocaleString('es-PE') + '/'
+                        + verificacion.catalogo.toLocaleString('es-PE')
+                    : '0/?';
+                mostrarEstadoBusqueda(
+                    'Búsqueda parcial: el índice de texto completo está en construcción ('
+                    + cobertura + ' cartas). Se muestran coincidencias verificadas y por nombre; '
+                    + verificacion.pendientes.toLocaleString('es-PE')
+                    + ' cartas requieren todavía indexación para descartar o confirmar '
+                    + 'coincidencias en ataques y habilidades. El resultado no es exhaustivo.',
+                    true
                 );
             } else {
-                // Si no hay resultados iniciales, hacer búsqueda amplia
-                const endpointAmplio = 'cards?';
-                const filtrosAmplios = [];
-                if (expansionSeleccionada) filtrosAmplios.push(`set.id=eq:${expansionSeleccionada.id}`);
-                if (tipoSeleccionado !== 'todos') filtrosAmplios.push(`types=${tipoSeleccionado}`);
-                if (categoriaSeleccionada !== 'todas') filtrosAmplios.push(`category=${categoriaSeleccionada}`);
-                if (checkboxHabilidad && checkboxHabilidad.checked) {
-                    filtrosAmplios.push('abilities=notnull:');
-                }
-                
-                const endpointFinal = endpointAmplio + filtrosAmplios.join('&');
-                const cartasAmplias = await fetchAPI(endpointFinal);
-                
-                if (cartasAmplias && cartasAmplias.length > 0) {
-                    // Obtener detalles completos de un subconjunto de cartas para búsqueda
-                    const limiteBusqueda = Math.min(100, cartasAmplias.length); // Limitar para evitar demasiadas llamadas
-                    const cartasParaBuscar = cartasAmplias.slice(0, limiteBusqueda);
-                    
-                    cartasConDetalles = await Promise.all(
-                        cartasParaBuscar.map(async carta => {
-                            try {
-                                return await fetchAPI(`cards/${carta.id}`);
-                            } catch (error) {
-                                console.warn(`Error al obtener detalles de la carta ${carta.id}:`, error);
-                                return carta; // Usar datos básicos si falla
-                            }
-                        })
-                    );
-                }
-            }
-            
-            // Filtrar por texto general en todos los campos
-            if (cartasConDetalles && cartasConDetalles.length > 0) {
-                const textoLower = textoGeneral.toLowerCase();
-                cartasFiltro = cartasConDetalles.filter(carta => {
-                    if (!carta) return false;
-                    
-                    // Buscar en nombre
-                    if (carta.name && carta.name.toLowerCase().includes(textoLower)) return true;
-                    
-                    // Buscar en descripción
-                    if (carta.description && carta.description.toLowerCase().includes(textoLower)) return true;
-                    
-                    // Buscar en rareza
-                    if (carta.rarity && carta.rarity.toLowerCase().includes(textoLower)) return true;
-                    
-                    // Buscar en categoría
-                    if (carta.category && carta.category.toLowerCase().includes(textoLower)) return true;
-                    
-                    // Buscar en tipos
-                    if (carta.types && carta.types.some(tipo => tipo.toLowerCase().includes(textoLower))) return true;
-                    
-                    // Buscar en nombre de la expansión
-                    if (carta.set && carta.set.name && carta.set.name.toLowerCase().includes(textoLower)) return true;
-                    
-                    // Buscar en ataques (nombre, efecto y descripción)
-                    if (carta.attacks && carta.attacks.some(atk => {
-                        return (atk.name && atk.name.toLowerCase().includes(textoLower)) ||
-                               (atk.effect && atk.effect.toLowerCase().includes(textoLower)) ||
-                               (atk.description && atk.description.toLowerCase().includes(textoLower));
-                    })) return true;
-                    
-                    // Buscar en habilidades (nombre y efecto)
-                    if (carta.abilities && carta.abilities.some(hab => {
-                        return (hab.name && hab.name.toLowerCase().includes(textoLower)) ||
-                               (hab.effect && hab.effect.toLowerCase().includes(textoLower));
-                    })) return true;
-                    
-                    return false;
-                });
+                mostrarEstadoBusqueda(
+                    'Búsqueda verificada sobre ' + verificacion.total.toLocaleString('es-PE')
+                    + ' cartas candidatas.'
+                );
             }
         }
-        
+
+        // Evita mostrar cartas que no se pueden descargar como imagen salvo
+        // que el usuario desmarque explícitamente este criterio.
+        const soloImagen = document.getElementById('filtro-solo-imagen');
+        if (soloImagen?.checked) {
+            cartas = cartas.filter(carta => Boolean(baseImagenCarta(carta)));
+        }
+
         if (version !== versionBusqueda) return;
-        if (cartasFiltro && cartasFiltro.length > 0) {
-            cartasFiltradas = cartasFiltro;
-            if (cartasFiltradas.length > 0) {
-                mostrarCartas(cartasFiltradas);
-                document.getElementById('paginacion').style.display = 'flex';
-                actualizarExpansionesDisponibles(cartasFiltradas);
-            } else {
-                cartasContainer.innerHTML = '<p class="no-cards">No se encontraron cartas con los filtros seleccionados.</p>';
-                document.getElementById('paginacion').style.display = 'none';
-            }
+        cartasFiltradas = cartas;
+        if (cartas.length) {
+            mostrarCartas(cartas);
+            document.getElementById('paginacion').style.display = 'flex';
+            actualizarExpansionesDisponibles(cartas);
         } else {
-            cartasContainer.innerHTML = '<p class="no-cards">No se encontraron cartas con los filtros seleccionados.</p>';
+            cartasContainer.textContent = 'No se encontraron cartas con los criterios seleccionados'
+                + (soloImagen?.checked ? ' que tengan imagen disponible.' : '.');
             document.getElementById('paginacion').style.display = 'none';
-            if (filtros.length > 0) {
-                 actualizarExpansionesDisponibles([]);
-            } else {
-                 mostrarExpansiones(expansiones);
-            }
+            actualizarExpansionesDisponibles([]);
         }
     } catch (error) {
         if (version === versionBusqueda) {
-            cartasContainer.textContent = 'Error al filtrar las cartas: ' + error.message;
+            console.error('Error al buscar cartas:', error);
+            cartasContainer.textContent = 'No se pudo completar la búsqueda: ' + error.message;
             document.getElementById('paginacion').style.display = 'none';
+            mostrarEstadoBusqueda('La consulta falló. No significa que no existan cartas coincidentes.', true);
         }
     } finally {
         if (version === versionBusqueda) {
