@@ -14,3 +14,4 @@ jobs:
       - run: python -m pytest -q
       - run: node --check app.js
       - run: node --test tests/test_favoritos.cjs
+      - run: node --test tests/test_energia.cjs
