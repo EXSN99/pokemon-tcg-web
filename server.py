@@ -1,7 +1,8 @@
 """Flask web: catálogo público y PDFs de cartas TCGdex."""
 import logging
 import re
-from concurrent.futures import ThreadPoolExecutor
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -10,11 +11,12 @@ from urllib.parse import quote, urlparse
 import requests
 from flask import Flask, jsonify, request, send_file, send_from_directory
 from PIL import Image, UnidentifiedImageError
-from impresion import generar_pdf
+from impresion import CARDS_PER_PAGE, generar_pdf
 
 BASE_DIR = Path(__file__).resolve().parent
 API_BASE = "https://api.tcgdex.net/v2/es/cards"
-MAX_CARDS = 54
+MAX_PAGES = 20
+MAX_CARDS = CARDS_PER_PAGE * MAX_PAGES  # 180 copias
 MAX_IMAGE_BYTES = 6 * 1024 * 1024
 CARD_ID_RE = re.compile(r"^[A-Za-z0-9_.-]{3,72}$")
 Image.MAX_IMAGE_PIXELS = 12_000_000
@@ -80,6 +82,48 @@ def _get_image(card_id: str) -> Image.Image:
     except (UnidentifiedImageError, OSError) as exc:
         raise ValueError("Formato de imagen inválido") from exc
 
+def _imagenes_para_pdf(ids: list[str]):
+    """Entrega imágenes por hoja, con caché pequeña de imágenes repetidas.
+
+    Máximo nueve imágenes nuevas por lote y cuatro imágenes conservadas
+    entre lotes, evitando precargar hasta 180 cartas descomprimidas.
+    """
+    cache = OrderedDict()
+    nuevas = {}
+    try:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for offset in range(0, len(ids), CARDS_PER_PAGE):
+                ids_pagina = ids[offset:offset + CARDS_PER_PAGE]
+                faltantes = [cid for cid in dict.fromkeys(ids_pagina) if cid not in cache]
+                nuevas = {}
+                futuros = {pool.submit(_get_image, cid): cid for cid in faltantes}
+                try:
+                    for futuro in as_completed(futuros):
+                        nuevas[futuros[futuro]] = futuro.result()
+                except Exception:
+                    for futuro in futuros:
+                        futuro.cancel()
+                    raise
+
+                for cid in ids_pagina:
+                    yield cache[cid] if cid in cache else nuevas[cid]
+
+                # La hoja ya fue dibujada: se pueden liberar imágenes antiguas.
+                for cid, imagen in nuevas.items():
+                    cache[cid] = imagen
+                nuevas = {}
+                for cid in ids_pagina:
+                    cache.move_to_end(cid)
+                while len(cache) > 4:
+                    _, imagen = cache.popitem(last=False)
+                    imagen.close()
+    finally:
+        for imagen in nuevas.values():
+            imagen.close()
+        for imagen in cache.values():
+            imagen.close()
+
+
 @app.post("/api/pdf")
 def create_pdf():
     payload = request.get_json(silent=True)
@@ -87,27 +131,19 @@ def create_pdf():
         return jsonify(error="Envía JSON con una lista 'ids'."), 400
     ids = payload["ids"]
     if not 1 <= len(ids) <= MAX_CARDS:
-        return jsonify(error=f"Selecciona entre 1 y {MAX_CARDS} cartas."), 400
+        return jsonify(error=f"Selecciona entre 1 y {MAX_CARDS} copias (máximo {MAX_PAGES} páginas A4)."), 400
     if any(not isinstance(item, str) or not CARD_ID_RE.fullmatch(item) for item in ids):
         return jsonify(error="Se encontraron identificadores de carta inválidos."), 400
-    # Se descargan las imágenes de IDs únicos una sola vez.
-    # Las copias solicitadas se repiten al crear el PDF, sin llamadas extra a TCGdex.
-    ids_unicos = list(dict.fromkeys(ids))
+
     try:
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            imagenes_unicas = list(pool.map(_get_image, ids_unicos))
+        pdf = generar_pdf(_imagenes_para_pdf(ids))
     except (requests.RequestException, ValueError, OSError) as exc:
         app.logger.warning("PDF no generado: %s", exc)
-        return jsonify(error=f"No se pudo obtener una de las cartas: {exc}"), 422
-    try:
-        imagenes_por_id = dict(zip(ids_unicos, imagenes_unicas))
-        pdf = generar_pdf([imagenes_por_id[carta_id] for carta_id in ids])
+        return jsonify(error=f"No se pudo obtener o procesar una carta: {exc}"), 422
     except Exception:
         app.logger.exception("Fallo al crear PDF")
         return jsonify(error="No se pudo crear el documento PDF."), 500
-    finally:
-        for image in imagenes_unicas:
-            image.close()
+
     date = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     return send_file(
         BytesIO(pdf), mimetype="application/pdf", as_attachment=True,
