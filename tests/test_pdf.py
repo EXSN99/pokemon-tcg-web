@@ -24,7 +24,7 @@ def test_health_and_static():
     indice = client.get("/data/energy-index.json")
     assert indice.status_code == 200
     datos = indice.get_json()
-    assert datos["schemaVersion"] == 1
+    assert datos["schemaVersion"] == 2
     assert datos["language"] == "es"
     assert "swsh3-136" in datos["cards"]
     assert indice.cache_control.no_cache
