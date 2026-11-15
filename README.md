@@ -58,9 +58,24 @@ Este filtro **no es el tipo del Pokémon**. Por ejemplo, un Pokémon de tipo Dra
 
 **Ejemplo:** un Dragón con un ataque que utiliza Agua y Fuego aparecerá con las dos energías seleccionadas y el modo **Todas**.
 
-**Nota técnica y de rendimiento:** TCGdex incluye los costes de energía en el detalle de cada carta como `attacks[].cost`, pero el filtro de catálogo `attacks.cost` devolvió resultados vacíos en nuestras pruebas reales. Por eso la web examina los detalles de las cartas candidatas y reutiliza sus datos mientras permanece abierta. Para evitar resultados parciales y saturar la API, una búsqueda puede examinar **hasta 400 cartas candidatas**; si la selección es más amplia, la aplicación pide reducirla mediante expansión, nombre o tipo. **Incolora** es un símbolo de coste genérico, no necesariamente una carta de Energía Incolora.
+**Índice de energías:** GitHub Actions construye diariamente un archivo JSON con las energías exigidas por los ataques (`attacks[].cost`) de las cartas en español. La web carga ese índice y filtra sus entradas **sin realizar una solicitud por carta**, incluso si hay más de 400 cartas candidatas. Se conservan también las cartas que no tienen coste de ataque (lista vacía), y las peticiones fallidas se reintentan más adelante.
+
+**Mientras se completa la primera indexación**, las cartas todavía no incorporadas al índice se consultan directamente a TCGdex cuando son necesarias. Para no generar miles de solicitudes simultáneas, una búsqueda con más de **1.000 cartas pendientes** mostrará un aviso y solicitará acotar la selección. Este es un límite **temporal de datos faltantes**, no un límite sobre las cartas ya indexadas; desaparecerá en las búsquedas cubiertas completamente por el índice. El panel de energías muestra la cobertura actual del índice.
+
+**Incolora** es un símbolo de coste genérico, no necesariamente una carta de Energía Incolora.
 
 Referencia: [TCGdex, estructura de las cartas](https://tcgdex.dev/es/reference/card).
+
+### Cómo se mantiene el índice
+
+- **Fuente:** `https://api.tcgdex.net/v2/es/cards` y el detalle de cada carta.
+- **Datos:** `data/energy-index.json`, con ID, energías del coste de ataques y metadatos de cobertura.
+- **Carga:** `scripts/build_energy_index.py`, incremental e idempotente; procesa hasta 1.200 cartas pendientes en cada ejecución programada.
+- **Programación:** `.github/workflows/energy-index.yml`, automática una vez al día y con ejecución manual habilitada desde GitHub Actions.
+- **Actualización de la web:** el archivo se publica con el proyecto; al desplegar el nuevo commit, los usuarios consultan la versión ampliada.
+
+Puedes seguir las ejecuciones en [GitHub Actions — Actualizar índice de energías](https://github.com/EXSN99/pokemon-tcg-web/actions/workflows/energy-index.yml). La cobertura y la fecha de generación aparecen en el propio JSON. No se almacenan imágenes ni datos personales, solo un índice derivado de los costes de ataques publicados por TCGdex.
+
 
 ### Generación de PDF de hasta 20 páginas
 
