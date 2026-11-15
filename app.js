@@ -790,8 +790,12 @@ function filtrarExpansiones() {
 
 // Aplicar todos los filtros
 async function aplicarFiltros() {
+    const version = ++versionBusqueda;
+    const seleccion = new Set(energiasSeleccionadas);
+    const modoEnergias = criterioEnergias;
     paginaActual = 1;
     loadingCartas.style.display = 'block';
+    loadingCartas.textContent = 'Cargando cartas…';
     cartasContainer.innerHTML = '';
     try {
         let endpoint = 'cards?';
@@ -801,13 +805,10 @@ async function aplicarFiltros() {
         if (expansionSeleccionada) filtros.push(`set.id=eq:${expansionSeleccionada.id}`);
         if (tipoSeleccionado !== 'todos') filtros.push(`types=${tipoSeleccionado}`);
         if (categoriaSeleccionada !== 'todas') filtros.push(`category=${categoriaSeleccionada}`);
-        if (energiaAtaqueSeleccionada !== 'todas') {
-            filtros.push(`attacks.cost=${encodeURIComponent(energiaAtaqueSeleccionada)}`);
-        }
         
         // Filtro de nombre usando el parámetro name de la API
         nombreBuscado = filtroNombre.value.trim();
-        if (nombreBuscado) filtros.push(`name=like:${nombreBuscado}`);
+        // Al usar Búsqueda General, no añadir filtro por nombre a la API.
         
         // Filtro de habilidad usando el parámetro abilities de la API
         const checkboxHabilidad = document.getElementById('filtro-habilidad');
@@ -828,9 +829,30 @@ async function aplicarFiltros() {
         
         endpoint += filtros.join('&');
         let cartasFiltro = await fetchAPI(endpoint);
-        
-        // Si hay texto general, hacer búsqueda completa en todos los campos
-        if (textoGeneral) {
+        if (version !== versionBusqueda) return;
+        if (seleccion.size) {
+            if (!Array.isArray(cartasFiltro)) throw new Error('Respuesta de catálogo inválida');
+            // No devolver resultados parciales tras revisar solo algunas cartas.
+            // El usuario debe acotar cuando el alcance excede el límite seguro.
+            if (cartasFiltro.length > LIMITE_CANDIDATOS_ENERGIA) {
+                cartasContainer.textContent = 'Hay ' + cartasFiltro.length
+                    + ' cartas candidatas. Selecciona una expansión o filtra por nombre/tipo '
+                    + 'para revisar el coste real de sus ataques (máximo '
+                    + LIMITE_CANDIDATOS_ENERGIA + ' por búsqueda).';
+                document.getElementById('paginacion').style.display = 'none';
+                return;
+            }
+            const detalles = await resolverDetallesEnergia(cartasFiltro, version);
+            if (!detalles || version !== versionBusqueda) return;
+            cartasFiltro = detalles.filter(carta => coincideEnergia(carta, seleccion, modoEnergias));
+            if (textoGeneral) {
+                cartasFiltro = cartasFiltro.filter(carta => coincideTextoCarta(carta, textoGeneral));
+            }
+        }
+
+        // Si hay texto general sin energía, conservar la búsqueda completa original
+
+        if (textoGeneral && !seleccion.size) {
             // Obtener detalles completos de las cartas para buscar en todos los campos
             let cartasConDetalles = [];
             
@@ -853,9 +875,6 @@ async function aplicarFiltros() {
                 if (expansionSeleccionada) filtrosAmplios.push(`set.id=eq:${expansionSeleccionada.id}`);
                 if (tipoSeleccionado !== 'todos') filtrosAmplios.push(`types=${tipoSeleccionado}`);
                 if (categoriaSeleccionada !== 'todas') filtrosAmplios.push(`category=${categoriaSeleccionada}`);
-                if (energiaAtaqueSeleccionada !== 'todas') {
-                    filtrosAmplios.push(`attacks.cost=${encodeURIComponent(energiaAtaqueSeleccionada)}`);
-                }
                 if (checkboxHabilidad && checkboxHabilidad.checked) {
                     filtrosAmplios.push('abilities=notnull:');
                 }
@@ -923,6 +942,7 @@ async function aplicarFiltros() {
             }
         }
         
+        if (version !== versionBusqueda) return;
         if (cartasFiltro && cartasFiltro.length > 0) {
             cartasFiltradas = cartasFiltro;
             if (cartasFiltradas.length > 0) {
@@ -943,10 +963,15 @@ async function aplicarFiltros() {
             }
         }
     } catch (error) {
-        cartasContainer.innerHTML = `<p class=\"error\">Error al filtrar las cartas: ${error.message}</p>`;
-        document.getElementById('paginacion').style.display = 'none';
+        if (version === versionBusqueda) {
+            cartasContainer.textContent = 'Error al filtrar las cartas: ' + error.message;
+            document.getElementById('paginacion').style.display = 'none';
+        }
     } finally {
-        loadingCartas.style.display = 'none';
+        if (version === versionBusqueda) {
+            loadingCartas.style.display = 'none';
+            loadingCartas.textContent = 'Cargando…';
+        }
     }
 }
 
