@@ -75,19 +75,43 @@ def get_json(url: str, session: requests.Session | None = None) -> object:
     raise RuntimeError("No se pudo consultar TCGdex")
 
 
-def descargar_carta(card_id: str) -> tuple[str, list[str]]:
+def texto_busqueda(carta: dict) -> str:
+    """Texto español normalizado para encontrar nombres, ataques y habilidades."""
+    campos = [
+        carta.get("name"), carta.get("description"), carta.get("effect"),
+        carta.get("trainerEffect"), carta.get("rarity"), carta.get("category"),
+        carta.get("illustrator"),
+    ]
+    campos.extend(carta.get("types") or [])
+    conjunto = carta.get("set")
+    if isinstance(conjunto, dict):
+        campos.append(conjunto.get("name"))
+    for llave in ("attacks", "abilities"):
+        for bloque in carta.get(llave) or []:
+            if isinstance(bloque, dict):
+                campos.extend([bloque.get("name"), bloque.get("effect"),
+                               bloque.get("description"), bloque.get("damage")])
+    return " ".join(normalizar(campo) for campo in campos
+                    if campo is not None and str(campo).strip())
+
+
+def descargar_carta(card_id: str) -> tuple[str, dict]:
     # Una sesión por llamada evita compartir objetos requests.Session entre hilos.
     carta = get_json(f"{API}/cards/{requests.utils.quote(card_id, safe='')}")
     if not isinstance(carta, dict) or carta.get("id") != card_id:
         raise ValueError(f"ID o respuesta inválidos: {card_id}")
-    return card_id, tipos_energia(carta)
+    return card_id, {
+        "energies": tipos_energia(carta),
+        "search": texto_busqueda(carta),
+        "image": carta.get("image") if isinstance(carta.get("image"), str) else None,
+    }
 
 
 def leer_indice(path: Path) -> dict:
     if not path.is_file():
         return {}
     contenido = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(contenido, dict) or contenido.get("schemaVersion") != 1:
+    if not isinstance(contenido, dict) or contenido.get("schemaVersion") not in (1, 2):
         raise ValueError("Índice existente con versión inesperada")
     return contenido
 
@@ -110,13 +134,33 @@ def construir_indice(path: Path = DEST, batch_size: int = 1200, workers: int = 4
     if not isinstance(anteriores, dict):
         raise ValueError("Índice previo inválido")
     ids_validos = set(ids)
-    cards = {cid: lista for cid, lista in anteriores.items()
-             if cid in ids_validos and isinstance(lista, list)}
+    cards = {
+        cid: info for cid, info in anteriores.items()
+        if cid in ids_validos and (
+            isinstance(info, list)
+            or (isinstance(info, dict) and isinstance(info.get("energies"), list))
+        )
+    }
+    # Catálogo completo: datos breves para búsquedas por nombre y URL de imagen
+    # tomada de TCGdex, no fabricada a partir del ID.
+    catalog = {
+        item["id"]: {
+            "name": item.get("name") or "",
+            "image": item.get("image") if isinstance(item.get("image"), str) else None,
+            "localId": item.get("localId") or "",
+        }
+        for item in resumenes
+        if isinstance(item, dict) and item.get("id") in ids_validos
+    }
 
-    # Conjunto emblemático de prueba y luego prioridad al orden (actualidad) de TCGdex.
-    prioritarios = ["swsh3-136"]
-    pendientes = [cid for cid in dict.fromkeys(prioritarios + ids)
-                  if cid in ids_validos and cid not in cards][:batch_size]
+    # Prioriza enriquecer entradas viejas (listas solo con energía);
+    # lo demás se llena progresivamente en las siguientes ejecuciones.
+    pendientes = [
+        cid for cid in dict.fromkeys(["swsh3-136"] + ids)
+        if cid not in cards or not (
+            isinstance(cards[cid], dict) and isinstance(cards[cid].get("search"), str)
+        )
+    ][:batch_size]
     logging.info("Catálogo: %d | indexadas: %d | nuevas: %d", len(ids), len(cards), len(pendientes))
 
     errores: list[str] = []
@@ -137,12 +181,14 @@ def construir_indice(path: Path = DEST, batch_size: int = 1200, workers: int = 4
     # Ningún fallo externo destruye o invalida el índice anterior.
     ahora = datetime.now(timezone.utc).isoformat(timespec="seconds")
     resultado = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "language": "es",
         "source": "TCGdex REST v2",
         "generatedAt": ahora,
         "catalogSize": len(ids),
         "indexedCount": len(cards),
+        "searchIndexedCount": sum(1 for c in cards.values() if isinstance(c, dict) and isinstance(c.get("search"), str)),
+        "catalog": catalog,
         "complete": len(cards) == len(ids),
         "failedThisRun": len(errores),
         "cards": dict(sorted(cards.items())),
