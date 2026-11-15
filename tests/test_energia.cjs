@@ -23,7 +23,7 @@ function elemento() {
     };
 }
 
-function preparar({resumenes = [], detalles = {}} = {}) {
+function preparar({resumenes = [], detalles = {}, indice = null} = {}) {
     const elements = new Map();
     const get = id => {
         if (!elements.has(id)) elements.set(id, elemento());
@@ -42,6 +42,13 @@ function preparar({resumenes = [], detalles = {}} = {}) {
     });
     ctx.resumenesFixture = resumenes;
     ctx.detallesFixture = detalles;
+    ctx.indiceFixture = indice || {
+        schemaVersion: 1, language: 'es', cards: {},
+        indexedCount: 0, catalogSize: 15928, complete: false
+    };
+    ctx.fetch = async (url, options) => ({
+        ok: true, status: 200, json: async () => ctx.indiceFixture
+    });
     vm.runInContext(source, ctx);
     vm.runInContext(
         "globalThis.llamadas = [];"
@@ -140,11 +147,54 @@ test('combina energía con texto general de los ataques', async () => {
     assert.deepEqual(Array.from(app.ctx.resultados), ['dragon-101']);
 });
 
-test('no devuelve resultados parciales si la búsqueda sin expansión es demasiado amplia', async () => {
-    const resumenes = Array.from({length:401},(_,i)=>({id:'swsh3-'+i,name:'Carta'}));
+test('filtra 401 cartas indexadas sin límite de 400 ni llamadas individuales', async () => {
+    const resumenes = Array.from({length: 401}, (_, i) =>
+        ({id: 'sv-' + String(i), name: 'Carta ' + i}));
+    const cards = Object.fromEntries(resumenes.map((r, i) =>
+        [r.id, i % 2 ? ['Fire'] : ['Water']]));
+    const app = preparar({
+        resumenes,
+        indice: {schemaVersion: 1, language: 'es', indexedCount: 401,
+                 catalogSize: 401, complete: true, cards}
+    });
+    app.eval("energiasSeleccionadas.add('Fire')");
+    await app.eval('aplicarFiltros()');
+    assert.equal(app.ctx.resultados.length, 200);
+    assert.equal(app.ctx.llamadas.length, 1); // solo lista de catálogo
+    assert.equal(app.get('energia-indice-estado').textContent.includes('completo'), true);
+});
+
+test('consulta bajo demanda las cartas sin índice, sin límite de 400', async () => {
+    const resumenes = Array.from({length: 401}, (_, i) =>
+        ({id: 'sv-' + String(i), name: 'Carta ' + i}));
+    const detalles = Object.fromEntries(resumenes.map(x => [
+        x.id, { ...x, attacks: [{cost: ['Fuego']}] }
+    ]));
+    const app = preparar({resumenes, detalles});
+    app.eval("energiasSeleccionadas.add('Fire')");
+    await app.eval('aplicarFiltros()');
+    assert.equal(app.ctx.resultados.length, 401);
+    assert.equal(app.ctx.llamadas.length, 402);
+});
+
+test('si faltan más de mil cartas, avisa y nunca presenta resultados parciales', async () => {
+    const resumenes = Array.from({length: 1001}, (_, i) =>
+        ({id:'swsh3-'+i,name:'Carta'}));
     const app = preparar({resumenes});
     app.eval("energiasSeleccionadas.add('Fire')");
     await app.eval('aplicarFiltros()');
-    assert.match(app.get('cartas-container').textContent,/Selecciona una expansión/i);
-    assert.equal(app.ctx.llamadas.length,1); // no descarga 401 detalles
+    assert.match(app.get('cartas-container').textContent,/índice.*construyendo/i);
+    assert.equal(app.ctx.llamadas.length, 1);
 });
+
+test('índice reconoce carta sin ataques y nunca la confunde con pendiente', async () => {
+    const resumenes = [{id:'swsh3-136',name:'Furret'}, {id:'sv-1',name:'Entrenador'}];
+    const indice = {schemaVersion:1,language:'es',catalogSize:2,indexedCount:2,
+        complete:true,cards:{'swsh3-136':['Colorless'],'sv-1':[]}};
+    const app = preparar({resumenes,indice});
+    app.eval("energiasSeleccionadas.add('Colorless')");
+    await app.eval('aplicarFiltros()');
+    assert.deepEqual(Array.from(app.ctx.resultados), ['swsh3-136']);
+    assert.equal(app.ctx.llamadas.length,1);
+});
+
