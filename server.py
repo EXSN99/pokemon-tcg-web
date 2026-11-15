@@ -37,6 +37,13 @@ def javascript():
 def styles():
     return send_from_directory(BASE_DIR, "styles.css")
 
+@app.get("/data/energy-index.json")
+def energy_index():
+    # Se publica con el mismo origen HTTPS; el índice solo contiene IDs y costes.
+    response = send_from_directory(BASE_DIR / "data", "energy-index.json")
+    response.cache_control.no_cache = True
+    return response
+
 @app.get("/health")
 def health():
     return jsonify(status="ok")
