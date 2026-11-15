@@ -24,7 +24,7 @@
 
 1. **Entra a la web:** [pokemon-tcg-cartas-0nch.onrender.com](https://pokemon-tcg-cartas-0nch.onrender.com/).
 2. **Explora las expansiones:** selecciona una de la lista o utiliza el buscador de expansiones.
-3. **Encuentra tus cartas:** usa los filtros de nombre, categoría, **tipo de Pokémon**, **energía en ataques**, habilidad o **Búsqueda General**. El nuevo filtro de energía revisa la energía requerida para ejecutar un ataque, independientemente del tipo del Pokémon: por ejemplo, un Dragón que pide Agua o Fuego. En Búsqueda General, pulsa **Buscar** o **Enter**.
+3. **Encuentra tus cartas:** utiliza nombre, categoría, tipo de Pokémon, habilidad o **Búsqueda General**. En **Energía requerida en ataques**, pulsa uno o varios botones (por ejemplo, Agua y Fuego) y elige **Cualquiera** o **Todas**. Para filtrar una expansión grande, selecciónala primero. En Búsqueda General, pulsa **Buscar** o **Enter**.
 4. **Abre una carta:** selecciónala para ver su imagen ampliada y navegar entre cartas.
 5. **Añádela a favoritos:** pulsa el corazón 🤍. Cada pulsación suma **una copia** de esa carta y el contador ❤️ muestra el total de copias.
 6. **Elige cuántas copias imprimir:** abre ❤️ **Favoritos** y usa **+** para añadir otra copia o **−** para quitar una. La **✕** elimina todas las copias de esa carta. El contador te indica el total seleccionado.
@@ -45,16 +45,22 @@
 
 Las líneas de corte se prolongan hasta los bordes del documento. El tamaño de cada carta se define en el PDF, pero una impresora puede reducirlo si se selecciona alguna opción de ajuste de escala.
 
-## Filtro por energía de ataque
+## Filtro por energía requerida en los ataques
 
-**Tipo de Pokémon** y **Energía en ataques** son filtros distintos que puedes combinar.
+Este filtro **no es el tipo del Pokémon**. Por ejemplo, un Pokémon de tipo Dragón puede tener ataques que exijan Agua, Fuego y energía Incolora.
 
-- **Tipo de Pokémon: Dragón** muestra cartas cuyo Pokémon es de tipo Dragón.
-- **Energía en ataques: Agua** muestra cartas con al menos un ataque cuyo coste incluye energía Agua, aunque el Pokémon sea de tipo Dragón, Fuego u otro.
-- Si un ataque exige **Agua + Fuego**, la carta aparecerá al filtrar por cualquiera de las dos energías.
-- La opción **Incolora** se refiere a símbolos de coste genérico; no implica que deba usarse una carta de Energía Incolora.
+1. Selecciona una **expansión** (o acota las cartas por nombre/tipo).
+2. Marca una o varias energías: Agua, Fuego, Planta, Rayo, Psíquica, Lucha, Oscura, Metálica, Hada o Incolora.
+3. En **Combinar energías**, elige:
+   - **Cualquiera (OR):** muestra cartas si al menos una de las energías seleccionadas aparece en algún ataque.
+   - **Todas (AND):** muestra cartas si todas las energías seleccionadas aparecen entre los costes de sus ataques, incluso si están distribuidas entre distintos ataques.
+4. Para quitar un filtro, vuelve a pulsar su botón. Puedes combinarlo con el filtro **Tipo de Pokémon**.
 
-El filtro utiliza el campo `attacks.cost` documentado por [TCGdex](https://tcgdex.dev/es/tcg-live). La disponibilidad de resultados depende de los detalles registrados en la API.
+**Ejemplo:** un Dragón con un ataque que utiliza Agua y Fuego aparecerá con las dos energías seleccionadas y el modo **Todas**.
+
+**Nota técnica y de rendimiento:** TCGdex incluye los costes de energía en el detalle de cada carta como `attacks[].cost`, pero el filtro de catálogo `attacks.cost` devolvió resultados vacíos en nuestras pruebas reales. Por eso la web examina los detalles de las cartas candidatas y reutiliza sus datos mientras permanece abierta. Para evitar resultados parciales y saturar la API, una búsqueda puede examinar **hasta 400 cartas candidatas**; si la selección es más amplia, la aplicación pide reducirla mediante expansión, nombre o tipo. **Incolora** es un símbolo de coste genérico, no necesariamente una carta de Energía Incolora.
+
+Referencia: [TCGdex, estructura de las cartas](https://tcgdex.dev/es/reference/card).
 
 ### Generación de PDF de hasta 20 páginas
 
