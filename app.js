@@ -21,7 +21,6 @@ const energiasSeleccionadas = new Set();
 let criterioEnergias = 'cualquiera';
 let versionBusqueda = 0;
 const cacheDetallesEnergia = new Map();
-const LIMITE_CANDIDATOS_ENERGIA = 400;
 const CONCURRENCIA_ENERGIA = 6;
 let categoriaSeleccionada = 'todas';
 let nombreBuscado = '';
@@ -608,16 +607,105 @@ function coincideTextoCarta(carta, texto) {
         .includes(texto.toLocaleLowerCase('es')));
 }
 
-async function resolverDetallesEnergia(resumenes, version) {
-    const detalles = [];
-    for (let i = 0; i < resumenes.length; i += CONCURRENCIA_ENERGIA) {
+// Índice generado por GitHub Actions. Se carga una vez por sesión para evitar
+// cientos de solicitudes repetidas a TCGdex. El coste de las cartas todavía
+// no indexadas se consulta bajo demanda con concurrencia limitada.
+let promesaIndiceEnergia = null;
+
+async function cargarIndiceEnergia() {
+    if (!promesaIndiceEnergia) {
+        promesaIndiceEnergia = (async () => {
+            try {
+                if (typeof fetch !== 'function') throw new Error('fetch no disponible');
+                const respuesta = await fetch('/data/energy-index.json', {cache: 'no-store'});
+                if (!respuesta.ok) throw new Error('HTTP ' + respuesta.status);
+                const indice = await respuesta.json();
+                if (indice?.schemaVersion !== 1 || indice.language !== 'es'
+                    || !indice.cards || typeof indice.cards !== 'object'
+                    || Array.isArray(indice.cards)) {
+                    throw new Error('Formato de índice de energía inválido');
+                }
+                return indice;
+            } catch (error) {
+                console.warn('Índice no disponible; se usarán consultas TCGdex:', error);
+                return {cards: {}, indexedCount: 0, catalogSize: 0, complete: false};
+            }
+        })();
+    }
+    const indice = await promesaIndiceEnergia;
+    const estado = document.getElementById('energia-indice-estado');
+    if (estado) {
+        const total = Number(indice.catalogSize) || 0;
+        const indexed = Number(indice.indexedCount) || 0;
+        estado.textContent = total
+            ? 'Índice de energías: ' + indexed.toLocaleString('es-PE') + ' / '
+                + total.toLocaleString('es-PE') + ' cartas'
+                + (indice.complete ? ' · completo' : ' · actualizándose diariamente')
+            : 'Índice en preparación; algunas cartas se consultarán directamente a TCGdex';
+    }
+    return indice;
+}
+
+function coincideEnergiaIndexada(costos, seleccion, modo) {
+    if (!Array.isArray(costos)) return false;
+    const tipos = new Set(costos);
+    return modo === 'todas'
+        ? [...seleccion].every(e => tipos.has(e))
+        : [...seleccion].some(e => tipos.has(e));
+}
+
+async function resolverDetallesEnergia(resumenes, version, seleccion, modo, textoGeneral) {
+    const indice = await cargarIndiceEnergia();
+    if (version !== versionBusqueda) return null;
+    const aceptadas = new Map();
+    const pendientes = [];
+
+    for (const resumen of resumenes) {
+        const detalles = cacheDetallesEnergia.get(resumen.id);
+        if (detalles) {
+            if (coincideEnergia(detalles, seleccion, modo)
+                && (!textoGeneral || coincideTextoCarta(detalles, textoGeneral))) {
+                aceptadas.set(resumen.id, detalles);
+            }
+            continue;
+        }
+        if (Object.prototype.hasOwnProperty.call(indice.cards, resumen.id)
+            && Array.isArray(indice.cards[resumen.id])) {
+            if (!coincideEnergiaIndexada(indice.cards[resumen.id], seleccion, modo)) {
+                continue;
+            }
+            if (!textoGeneral) {
+                aceptadas.set(resumen.id, resumen);
+                continue;
+            }
+        }
+        // No indexada, o necesita el detalle de ataques para buscar texto general.
+        pendientes.push(resumen);
+    }
+
+    // La protección solo se aplica a las solicitudes que FALTAN del índice.
+    // No existe límite de 400 candidatos cuando ya están indexados.
+    // Evita disparar miles de consultas concurrentes durante la carga inicial.
+    const LIMITE_PENDIENTES_TEMPORAL = 1000;
+    if (pendientes.length > LIMITE_PENDIENTES_TEMPORAL) {
+        const disponibles = Number(indice.indexedCount) || 0;
+        const total = Number(indice.catalogSize) || 0;
+        throw new Error('El índice de energías aún se está construyendo (' + disponibles
+            + '/' + total + ' cartas). Esta búsqueda tiene ' + pendientes.length
+            + ' cartas sin datos suficientes; por ahora selecciona una expansión '
+            + 'o acota por nombre para evitar sobrecargar TCGdex. '
+            + 'El límite de 400 candidatas ya no se aplica a cartas indexadas.');
+    }
+
+    let completadas = 0;
+    for (let i = 0; i < pendientes.length; i += CONCURRENCIA_ENERGIA) {
         if (version !== versionBusqueda) return null;
-        const lote = resumenes.slice(i,i + CONCURRENCIA_ENERGIA);
-        const datos = await Promise.all(lote.map(async resumen => {
+        const lote = pendientes.slice(i, i + CONCURRENCIA_ENERGIA);
+        const detalles = await Promise.all(lote.map(async resumen => {
             if (cacheDetallesEnergia.has(resumen.id)) return cacheDetallesEnergia.get(resumen.id);
             const completo = await fetchAPI('cards/' + encodeURIComponent(resumen.id));
             if (!completo || completo.id !== resumen.id) {
-                throw new Error('No se pudo verificar la carta ' + resumen.id);
+                throw new Error('No se pudo verificar el coste de ' + resumen.id);
             }
             cacheDetallesEnergia.set(resumen.id, completo);
             if (cacheDetallesEnergia.size > 800) {
@@ -625,11 +713,21 @@ async function resolverDetallesEnergia(resumenes, version) {
             }
             return completo;
         }));
-        detalles.push(...datos);
+        for (const carta of detalles) {
+            if (coincideEnergia(carta, seleccion, modo)
+                && (!textoGeneral || coincideTextoCarta(carta, textoGeneral))) {
+                aceptadas.set(carta.id, carta);
+            }
+        }
+        completadas += lote.length;
         if (version !== versionBusqueda) return null;
-        loadingCartas.textContent = 'Analizando costes: ' + detalles.length + '/' + resumenes.length;
+        if (pendientes.length > 0) {
+            loadingCartas.textContent = 'Verificando ' + completadas + ' / '
+                + pendientes.length + ' cartas que faltan en el índice…';
+        }
     }
-    return detalles;
+    // Mantener el orden del listado original.
+    return resumenes.filter(r => aceptadas.has(r.id)).map(r => aceptadas.get(r.id));
 }
 
 function configurarFiltroEnergiaAtaque() {
@@ -688,10 +786,15 @@ function configurarFiltroEnergiaAtaque() {
     const aviso = document.createElement('p');
     aviso.className = 'energia-ayuda';
     aviso.textContent = 'Se revisan las energías de los ataques, no el tipo del Pokémon. '
-      + '«Todas» exige esas energías en uno o varios ataques. '
-      + 'Para búsquedas amplias puede ser necesario seleccionar una expansión.';
+      + '«Todas» exige esas energías en uno o varios ataques.';
     panel.appendChild(aviso);
+    const estado = document.createElement('p');
+    estado.id = 'energia-indice-estado';
+    estado.className = 'energia-indice-estado';
+    estado.textContent = 'Cargando índice de energías…';
+    panel.appendChild(estado);
     document.querySelector('.filtro-container').appendChild(panel);
+    cargarIndiceEnergia();
 }
 
 // Configurar el filtro de texto de ataque
@@ -832,22 +935,12 @@ async function aplicarFiltros() {
         if (version !== versionBusqueda) return;
         if (seleccion.size) {
             if (!Array.isArray(cartasFiltro)) throw new Error('Respuesta de catálogo inválida');
-            // No devolver resultados parciales tras revisar solo algunas cartas.
-            // El usuario debe acotar cuando el alcance excede el límite seguro.
-            if (cartasFiltro.length > LIMITE_CANDIDATOS_ENERGIA) {
-                cartasContainer.textContent = 'Hay ' + cartasFiltro.length
-                    + ' cartas candidatas. Selecciona una expansión o filtra por nombre/tipo '
-                    + 'para revisar el coste real de sus ataques (máximo '
-                    + LIMITE_CANDIDATOS_ENERGIA + ' por búsqueda).';
-                document.getElementById('paginacion').style.display = 'none';
-                return;
-            }
-            const detalles = await resolverDetallesEnergia(cartasFiltro, version);
+            // El índice permite filtrar miles de cartas sin nuevas llamadas a la API.
+            // Solo las no indexadas se revisan individualmente.
+            const detalles = await resolverDetallesEnergia(
+                cartasFiltro, version, seleccion, modoEnergias, textoGeneral);
             if (!detalles || version !== versionBusqueda) return;
-            cartasFiltro = detalles.filter(carta => coincideEnergia(carta, seleccion, modoEnergias));
-            if (textoGeneral) {
-                cartasFiltro = cartasFiltro.filter(carta => coincideTextoCarta(carta, textoGeneral));
-            }
+            cartasFiltro = detalles;
         }
 
         // Si hay texto general sin energía, conservar la búsqueda completa original
