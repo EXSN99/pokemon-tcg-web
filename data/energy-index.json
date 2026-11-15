@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "language": "es",
+  "source": "TCGdex REST v2",
+  "generatedAt": null,
+  "catalogSize": 0,
+  "indexedCount": 1,
+  "complete": false,
+  "failedThisRun": 0,
+  "cards": {
+    "swsh3-136": [
+      "Colorless"
+    ]
+  }
+}
